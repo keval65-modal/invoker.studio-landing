@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoker Studio - Globe World</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        body.is-loading #ui,
+        body.is-loading #hotspots {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #c {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        body:not(.is-loading) #lore-panel {
+            pointer-events: auto;
+        }
+        #ui {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 100;
+            transition: opacity 0.35s ease;
+        }
+        #hotspots {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+            transition: opacity 0.35s ease;
+        }
+        .hotspot-btn {
+            padding: 8px 16px;
+            background: rgba(100, 150, 255, 0.8);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+        .hotspot-btn:hover {
+            background: rgba(100, 150, 255, 1);
+        }
+        .hotspot-btn.is-highlighted {
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+            background: rgba(180, 210, 255, 0.95);
+            color: #05000c;
+        }
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at 20% 20%, rgba(146, 108, 255, 0.25), rgba(5, 0, 12, 0.95));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.45s ease;
+            pointer-events: all;
+        }
+        #loading-overlay.is-hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .loading-content {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            color: #f4e9ff;
+            letter-spacing: 0.04em;
+            animation: float 3s ease-in-out infinite;
+        }
+        .loading-spinner {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #c58dff;
+            animation: spin 1s linear infinite;
+        }
+        #loading-text {
+            font-size: 18px;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        @keyframes float {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+            100% { transform: translateY(0); }
+        }
+        #lore-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: min(320px, 90vw);
+            background: rgba(12, 6, 24, 0.92);
+            border: 1px solid rgba(200, 160, 255, 0.4);
+            border-radius: 14px;
+            padding: 18px 20px 22px;
+            color: #f5edff;
+            box-shadow: 0 12px 45px rgba(7, 0, 18, 0.65);
+            opacity: 0;
+            transform: translateY(-10px);
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            z-index: 200;
+        }
+        #lore-panel.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        #lore-panel h2 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            letter-spacing: 0.04em;
+        }
+        #lore-panel p {
+            font-size: 14px;
+            line-height: 1.4;
+            color: #d8cfff;
+            margin-bottom: 12px;
+        }
+        #lore-panel .panel-actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+        #lore-panel button {
+            border: none;
+            border-radius: 8px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+        #lore-panel button.close-btn {
+            background: rgba(255, 255, 255, 0.12);
+            color: #f5edff;
+        }
+        #lore-panel button.close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay" role="status" aria-live="polite">
+        <div class="loading-content">
+            <div class="loading-spinner" aria-hidden="true"></div>
+            <p id="loading-text">Loading 0%</p>
+        </div>
+    </div>
+    <canvas id="c"></canvas>
+    <div id="ui">
+        <div>Season: <span id="season">Summer</span></div>
+        <div>Controls: Drag to rotate • Scroll to zoom</div>
+    </div>
+    <div id="hotspots">
+        <button class="hotspot-btn" data-hotspot="about">About Us</button>
+        <button class="hotspot-btn" data-hotspot="projects">Clients & Projects</button>
+        <button class="hotspot-btn" data-hotspot="contact">Contact Us</button>
+        <button class="hotspot-btn" data-hotspot="tos">Terms of Service</button>
+    </div>
+    <div id="lore-panel" aria-live="polite">
+        <h2 id="lore-panel-title">Lore</h2>
+        <p id="lore-panel-body">Select a marker to learn more.</p>
+        <div class="panel-actions">
+            <button class="close-btn" id="lore-panel-close">Close</button>
+        </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
+
