@@ -91,7 +91,7 @@ const camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 100);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 // Enable shadows
@@ -304,11 +304,12 @@ function addRingParticles(baseRadius, height, color, count, verticalRange) {
     return points;
 }
 
-const innerEffectParticles = addRingParticles(EFFECT_INNER_RADIUS, effectInnerRing.position.y, 0x41ffff, 220, 0.6);
-const outerEffectParticles = addRingParticles(EFFECT_OUTER_RADIUS, effectOuterRing.position.y, 0xffa8ff, 260, 0.8);
+const innerEffectParticles = addRingParticles(EFFECT_INNER_RADIUS, effectInnerRing.position.y, 0x41ffff, 140, 0.55);
+const outerEffectParticles = addRingParticles(EFFECT_OUTER_RADIUS, effectOuterRing.position.y, 0xffa8ff, 160, 0.75);
 
 const weatherSystems = [];
 let globalAtmosphereParticles = null;
+let globalPixelParticles = null;
 const floatingElements = [];
 const ambientAIs = [];
 const worldProps = [];
@@ -546,12 +547,48 @@ function createDancingJellyTrees(count = 6) {
         );
     }
 }
+
+function createGlobalPixelParticles() {
+    const count = 220;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const basePositions = new Float32Array(count * 3);
+    const amplitudes = new Float32Array(count);
+    const speeds = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+        const radius = WALKWAY_RADIUS + 5 + Math.random() * 6;
+        const angle = Math.random() * Math.PI * 2;
+        const y = THREE.MathUtils.lerp(PIXEL_PARTICLE_MIN_Y, PIXEL_PARTICLE_MAX_Y, Math.random());
+        const idx = i * 3;
+        positions[idx] = Math.cos(angle) * radius;
+        positions[idx + 1] = y;
+        positions[idx + 2] = Math.sin(angle) * radius;
+        basePositions[idx] = positions[idx];
+        basePositions[idx + 1] = y;
+        basePositions[idx + 2] = positions[idx + 2];
+        amplitudes[i] = 0.25 + Math.random() * 0.4;
+        speeds[i] = 0.4 + Math.random() * 0.8;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.PointsMaterial({
+        color: 0xfff4d6,
+        size: 0.05,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false
+    });
+    globalPixelParticles = new THREE.Points(geometry, material);
+    globalPixelParticles.userData = { basePositions, amplitudes, speeds };
+    scene.add(globalPixelParticles);
+}
 function createWeatherZones() {
     WEATHER_ZONES.forEach(zone => {
         const group = new THREE.Group();
         group.position.y = effectOuterRing.position.y + 0.1;
 
-        const particleCount = 220;
+        const particleCount = 140;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
         const speeds = [];
@@ -602,7 +639,7 @@ function createWeatherZones() {
 }
 
 function createGlobalAtmosphereParticles() {
-    const count = 350;
+    const count = 180;
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
     const speeds = [];
@@ -731,6 +768,7 @@ function placeVoyager() {
 
 createWeatherZones();
 createGlobalAtmosphereParticles();
+createGlobalPixelParticles();
 placeForestShrine();
 placeMagicGate();
 placeVoyager();
@@ -1165,6 +1203,10 @@ camera.up.set(0, 1, 0);
 const initialLookTarget = character.position.clone().add(new THREE.Vector3(0, CAMERA_LOOK_AT_OFFSET, 0));
 camera.lookAt(initialLookTarget);
 const cameraLookTarget = initialLookTarget.clone();
+const cameraForwardVec = new THREE.Vector3();
+const cameraRadialVec = new THREE.Vector3();
+const cameraTempVec = new THREE.Vector3();
+const cameraDesiredPos = new THREE.Vector3();
 
 // Character animation - moves along equator path
 function updateCharacter(dt) {
@@ -1219,18 +1261,23 @@ function updateCharacter(dt) {
 
 // ========== THIRD-PERSON CAMERA UPDATE (NO FLIPPING) ==========
 function updateCamera(dt) {
-    const baseForward = new THREE.Vector3(-Math.sin(characterAngle), 0, Math.cos(characterAngle));
-    const forward = baseForward.clone().multiplyScalar(cameraFollowDirection).normalize();
-    const radial = character.position.clone().normalize();
+    cameraForwardVec.set(-Math.sin(characterAngle), 0, Math.cos(characterAngle))
+        .multiplyScalar(cameraFollowDirection)
+        .normalize();
 
-    const desiredPosition = character.position.clone()
-        .sub(forward.clone().multiplyScalar(CAMERA_TRAIL_DISTANCE))
-        .add(radial.multiplyScalar(CAMERA_OUTWARD_OFFSET))
-        .add(new THREE.Vector3(0, CAMERA_VERTICAL_OFFSET, 0));
+    cameraRadialVec.copy(character.position).normalize();
 
-    camera.position.add(desiredPosition.sub(camera.position).multiplyScalar(CAMERA_POSITION_SMOOTH));
+    cameraDesiredPos.copy(character.position)
+        .sub(cameraForwardVec.multiplyScalar(CAMERA_TRAIL_DISTANCE));
 
-    const lookTarget = character.position.clone().add(new THREE.Vector3(0, CAMERA_LOOK_AT_OFFSET, 0));
+    cameraTempVec.copy(cameraRadialVec).multiplyScalar(CAMERA_OUTWARD_OFFSET);
+    cameraDesiredPos.add(cameraTempVec);
+    cameraDesiredPos.y += CAMERA_VERTICAL_OFFSET;
+
+    cameraTempVec.copy(cameraDesiredPos).sub(camera.position).multiplyScalar(CAMERA_POSITION_SMOOTH);
+    camera.position.add(cameraTempVec);
+
+    const lookTarget = cameraTempVec.set(0, CAMERA_LOOK_AT_OFFSET, 0).add(character.position);
     cameraLookTarget.add(lookTarget.sub(cameraLookTarget).multiplyScalar(CAMERA_LOOK_SMOOTH));
     camera.up.set(0, 1, 0);
     camera.lookAt(cameraLookTarget);
@@ -1996,6 +2043,18 @@ function animate() {
             positions[i * 3 + 1] += Math.sin(angle * 0.2) * 0.01;
         }
         globalAtmosphereParticles.geometry.attributes.position.needsUpdate = true;
+    }
+    
+    if (globalPixelParticles) {
+        const positions = globalPixelParticles.geometry.attributes.position.array;
+        const basePositions = globalPixelParticles.userData.basePositions;
+        const amplitudes = globalPixelParticles.userData.amplitudes;
+        const speeds = globalPixelParticles.userData.speeds;
+        for (let i = 0; i < speeds.length; i++) {
+            const idx = i * 3;
+            positions[idx + 1] = basePositions[idx + 1] + Math.sin(totalTime * speeds[i] + i) * amplitudes[i];
+        }
+        globalPixelParticles.geometry.attributes.position.needsUpdate = true;
     }
     
     // Floating sky elements
