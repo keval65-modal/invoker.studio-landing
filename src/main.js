@@ -23,6 +23,7 @@ const CHARACTER_BASE_ROTATION_SPEED = 0.8; // radians per second
 const CHARACTER_ROTATION_ACCEL = 6; // smoothing factor
 const SCROLL_ROTATION_IMPULSE = 0.6;
 const SCROLL_ROTATION_STEP = 0.05; // legacy for impulse magnitude scaling
+const TOUCH_SCROLL_STEP = 12; // px delta per impulse on touch devices
 
 // ========== SCENE SETUP ==========
 const canvas = document.getElementById('c');
@@ -1133,6 +1134,7 @@ let characterAngle = 0;
 const CHARACTER_HEIGHT = CHARACTER_SIZE * 0.75; // Half the character height
 let keyMovementDirection = 0; // -1 clockwise, +1 counter-clockwise
 let scrollImpulse = 0;
+let lastTouchY = null;
 const activeMovementKeys = new Set();
 let currentAngularSpeed = 0;
 
@@ -1168,6 +1170,31 @@ renderer.domElement.addEventListener('wheel', (event) => {
         scrollImpulse += SCROLL_ROTATION_IMPULSE; // scroll up => counter-clockwise
     }
 }, { passive: false });
+
+renderer.domElement.addEventListener('touchstart', (event) => {
+    if (event.touches.length !== 1) return;
+    lastTouchY = event.touches[0].clientY;
+}, { passive: true });
+
+renderer.domElement.addEventListener('touchmove', (event) => {
+    if (event.touches.length !== 1 || lastTouchY === null) return;
+    event.preventDefault();
+    const currentY = event.touches[0].clientY;
+    const deltaY = currentY - lastTouchY;
+    if (Math.abs(deltaY) >= TOUCH_SCROLL_STEP) {
+        const steps = Math.floor(Math.abs(deltaY) / TOUCH_SCROLL_STEP);
+        const direction = deltaY < 0 ? 1 : -1; // swipe up => forward
+        scrollImpulse += direction * SCROLL_ROTATION_IMPULSE * steps;
+        lastTouchY = currentY;
+    }
+}, { passive: false });
+
+const resetTouchScroll = () => {
+    lastTouchY = null;
+};
+
+renderer.domElement.addEventListener('touchend', resetTouchScroll);
+renderer.domElement.addEventListener('touchcancel', resetTouchScroll);
 
 // Function to get position on sphere surface at equator
 function getPositionOnEquator(angle, radius) {
