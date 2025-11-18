@@ -224,6 +224,18 @@
             75% { border-radius: 28% 49% 29% 100% / 93% 20% 64% 25%; }
             100% { border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%; }
         }
+        @media (max-width: 640px), (prefers-reduced-motion: reduce) {
+            .aurora {
+                display: none;
+            }
+            .loading-content {
+                padding: 2rem;
+                gap: 12px;
+            }
+            .loading-desc {
+                font-size: 0.95rem;
+            }
+        }
         #lore-panel {
             position: fixed;
             top: 20px;

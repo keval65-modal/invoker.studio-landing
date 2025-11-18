@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 // ========== CONFIGURATION ==========
@@ -28,6 +29,7 @@ const IS_LOW_POWER_DEVICE = (() => {
     return false;
 })();
 const DEVICE_PIXEL_RATIO_LIMIT = IS_LOW_POWER_DEVICE ? 0.75 : 0.95;
+const HIGH_DEVICE_PIXEL_RATIO = 1.2;
 const PARTICLE_COUNT_SCALE = IS_LOW_POWER_DEVICE ? 0.4 : 0.8;
 const DECOR_COUNT_SCALE = IS_LOW_POWER_DEVICE ? 0.4 : 0.75;
 const FOREST_DENSITY_SCALE = IS_LOW_POWER_DEVICE ? 0.35 : 0.55;
@@ -51,6 +53,18 @@ canvas.style.backgroundColor = '#05000c';
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText = document.getElementById('loading-text');
 const loadingProgress = document.getElementById('loading-progress');
+const canvasFreezeCover = (() => {
+    const el = document.createElement('canvas');
+    el.id = 'canvas-freeze-cover';
+    el.style.position = 'fixed';
+    el.style.inset = '0';
+    el.style.zIndex = '100';
+    el.style.pointerEvents = 'none';
+    el.style.opacity = '0';
+    el.style.transition = 'opacity 0.25s ease';
+    document.body.appendChild(el);
+    return el;
+})();
 const lorePanel = document.getElementById('lore-panel');
 const lorePanelTitle = document.getElementById('lore-panel-title');
 const lorePanelBody = document.getElementById('lore-panel-body');
@@ -180,9 +194,50 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.setClearColor('#05000c', 1);
+let animationPaused = false;
+function freezeRenderer() {
+    if (animationPaused) return;
+    animationPaused = true;
+    loreInteractivityEnabled = false;
+    renderer.autoClear = true;
+    renderer.render(scene, camera);
+    const ctx = canvasFreezeCover.getContext('2d');
+    canvasFreezeCover.width = canvas.width;
+    canvasFreezeCover.height = canvas.height;
+    ctx.drawImage(canvas, 0, 0);
+    canvas.style.opacity = '0';
+    canvasFreezeCover.style.opacity = '1';
+}
+function resumeRenderer() {
+    if (!animationPaused) return;
+    animationPaused = false;
+    loreInteractivityEnabled = true;
+    canvas.style.opacity = '1';
+    canvasFreezeCover.style.opacity = '0';
+    canvasFreezeCover.width = 0;
+    canvasFreezeCover.height = 0;
+}
 if (typeof window !== 'undefined') {
     window.renderer = renderer;
 }
+const cartoonComposer = new EffectComposer(renderer);
+const baseRenderPass = new RenderPass(scene, camera);
+const cartoonPass = new ShaderPass(CartoonShader);
+cartoonPass.uniforms.levels.value = 6.0;
+cartoonComposer.addPass(baseRenderPass);
+cartoonComposer.addPass(cartoonPass);
+cartoonComposer.setSize(window.innerWidth, window.innerHeight);
+function applyQualitySettings(mode) {
+    adaptiveQuality = mode;
+    adaptiveTimer = 0;
+    const ratio = mode === 'high'
+        ? Math.min(window.devicePixelRatio || 1, HIGH_DEVICE_PIXEL_RATIO)
+        : DEVICE_PIXEL_RATIO_LIMIT;
+    renderer.setPixelRatio(ratio);
+    renderer.shadowMap.enabled = mode !== 'low';
+    cartoonPass.enabled = (mode === 'low');
+}
+applyQualitySettings('low');
 const fpsOverlay = document.getElementById('fps-overlay') || (() => {
     const el = document.createElement('div');
     el.id = 'fps-overlay';
@@ -403,6 +458,7 @@ const pointer = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
 let hoveredLoreMarker = null;
 let activeLoreMarker = null;
+let loreInteractivityEnabled = true;
 
 const FLOATING_ASSET_MAX_ANGLE = Math.PI * 0.75;
 const FAR_VISIBILITY_DISTANCE = WALKWAY_RADIUS + 18;
@@ -1159,6 +1215,7 @@ function handleLorePointerMove(event) {
 }
 
 function processLorePointerMove() {
+    if (!loreInteractivityEnabled) return;
     if (!lorePointerDirty || !lastPointerEvent) return;
     lorePointerDirty = false;
     updatePointerFromEvent(lastPointerEvent);
@@ -1336,12 +1393,37 @@ const activeMovementKeys = new Set();
 let currentAngularSpeed = 0;
 let isMovementActive = false;
 let idleTimer = 0;
+let gestureFreezeSnapshot = null;
+let isGestureFrozen = false;
 const MOVEMENT_IDLE_THRESHOLD = 0.04;
 const MOVEMENT_IDLE_TIMEOUT = 0.35; // seconds
 let adaptiveQuality = 'low';
 let fpsAverage = 60;
 let adaptiveTimer = 0;
 let lastFrameStamp = performance.now();
+const CartoonShader = {
+    uniforms: {
+        tDiffuse: { value: null },
+        levels: { value: 6.0 }
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        varying vec2 vUv;
+        uniform sampler2D tDiffuse;
+        uniform float levels;
+        void main() {
+            vec4 color = texture2D(tDiffuse, vUv);
+            color.rgb = floor(color.rgb * levels) / levels;
+            gl_FragColor = color;
+        }
+    `
+};
 
 function updateKeyMovementDirection() {
     if (activeMovementKeys.has('ArrowRight')) {
@@ -1384,6 +1466,7 @@ renderer.domElement.addEventListener('touchstart', (event) => {
     if (event.touches.length !== 1) return;
     lastTouchY = event.touches[0].clientY;
     lastTouchX = event.touches[0].clientX;
+    freezeRenderer();
 }, { passive: true });
 
 renderer.domElement.addEventListener('touchmove', (event) => {
@@ -1411,6 +1494,7 @@ renderer.domElement.addEventListener('touchmove', (event) => {
 const resetTouchScroll = () => {
     lastTouchY = null;
     lastTouchX = null;
+    resumeRenderer();
 };
 
 renderer.domElement.addEventListener('touchend', resetTouchScroll);
@@ -2226,7 +2310,13 @@ function animate() {
     totalTime += dt;
     const instantaneousFPS = 1 / Math.max(dt, 0.0001);
     fpsAverage = THREE.MathUtils.lerp(fpsAverage, instantaneousFPS, 0.1);
-    fpsOverlay.textContent = `${fpsAverage.toFixed(0)} fps`;
+    fpsOverlay.textContent = `${fpsAverage.toFixed(0)} fps • ${adaptiveQuality}`;
+    adaptiveTimer += dt;
+    if (adaptiveQuality === 'low' && fpsAverage > 55 && adaptiveTimer > 4) {
+        applyQualitySettings('high');
+    } else if (adaptiveQuality === 'high' && fpsAverage < 42) {
+        applyQualitySettings('low');
+    }
     sparseParticleFrame = (sparseParticleFrame + 1) % PARTICLE_UPDATE_INTERVAL;
     const shouldUpdateSparseParticles = sparseParticleFrame === 0;
     forestGlowUniforms.time.value = totalTime;
@@ -2472,14 +2562,17 @@ function animate() {
     updateDayNightLight(totalTime);
     updatePerformanceControls();
     updateInteractionSystems();
-    if (ENABLE_BLOOM && bloomComposer) {
+    const useCartoonPost = cartoonPass.enabled;
+    if (useCartoonPost) {
+        cartoonComposer.render();
+    } else if (ENABLE_BLOOM && bloomComposer) {
         renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
         renderer.autoClear = false;
         renderer.clear();
         bloomComposer.render();
     } else {
         renderer.autoClear = true;
-    renderer.render(scene, camera);
+        renderer.render(scene, camera);
     }
 }
 
@@ -2488,6 +2581,7 @@ window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    cartoonComposer.setSize(window.innerWidth, window.innerHeight);
     if (ENABLE_BLOOM && bloomComposer) {
         bloomComposer.setSize(window.innerWidth, window.innerHeight);
     }
