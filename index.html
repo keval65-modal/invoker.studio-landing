@@ -19,10 +19,14 @@
             opacity: 0;
             pointer-events: none;
         }
+        body.is-loading #c {
+            opacity: 0;
+        }
         #c {
             display: block;
             width: 100vw;
             height: 100vh;
+            transition: opacity 0.4s ease;
         }
         body:not(.is-loading) #lore-panel {
             pointer-events: auto;
@@ -91,6 +95,25 @@
             color: #f4e9ff;
             letter-spacing: 0.04em;
             animation: float 3s ease-in-out infinite;
+            max-width: 360px;
+            padding: 30px 36px;
+            background: rgba(10, 0, 20, 0.55);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 60px rgba(5, 0, 12, 0.6);
+        }
+        .loading-content h1 {
+            font-size: 32px;
+            margin-bottom: 6px;
+        }
+        .loading-content .loading-desc {
+            font-size: 16px;
+            color: #e4d2ff;
+            opacity: 0.9;
+        }
+        .loading-progress {
+            font-size: 14px;
+            color: #c8afff;
         }
         .loading-spinner {
             width: 80px;
@@ -171,7 +194,10 @@
     <div id="loading-overlay" role="status" aria-live="polite">
         <div class="loading-content">
             <div class="loading-spinner" aria-hidden="true"></div>
-            <p id="loading-text">Loading 0%</p>
+            <h1>Welcome to Invoker Studio</h1>
+            <p class="loading-desc">We build immersive, story-driven applications and interactive worlds.</p>
+            <p id="loading-text">Brewing the magic...</p>
+            <p id="loading-progress" class="loading-progress">Loading 0%</p>
         </div>
     </div>
     <canvas id="c"></canvas>

@@ -16,12 +16,30 @@ const CHARACTER_SIZE = 0.3;
 const CHARACTER_RING_CLEARANCE = 0.15;
 const HOTSPOT_COUNT = 4;
 const SEASONS = ['summer', 'rain', 'autumn', 'winter'];
+const IS_LOW_POWER_DEVICE = (() => {
+    if (typeof navigator !== 'undefined') {
+        if (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) return true;
+        if (navigator.deviceMemory && navigator.deviceMemory <= 4) return true;
+        if (/mobi|android|iphone|ipad/i.test(navigator.userAgent)) return true;
+    }
+    if (typeof window !== 'undefined') {
+        return window.innerWidth < 1024;
+    }
+    return false;
+})();
+const DEVICE_PIXEL_RATIO_LIMIT = IS_LOW_POWER_DEVICE ? 1.0 : 1.2;
+const PARTICLE_COUNT_SCALE = IS_LOW_POWER_DEVICE ? 0.4 : 0.8;
+const DECOR_COUNT_SCALE = IS_LOW_POWER_DEVICE ? 0.4 : 0.75;
+const FOREST_DENSITY_SCALE = IS_LOW_POWER_DEVICE ? 0.35 : 0.55;
+const PARTICLE_UPDATE_INTERVAL = IS_LOW_POWER_DEVICE ? 3 : 2;
+const CRYSTAL_DRIFT_COUNT = IS_LOW_POWER_DEVICE ? 3 : 6;
+const MAGIC_CLUSTER_COUNT = IS_LOW_POWER_DEVICE ? 4 : 8;
 const SEASON_ANGLES = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]; // 0°, 90°, 180°, 270°
 
 // Character movement controls
 const CHARACTER_BASE_ROTATION_SPEED = 0.8; // radians per second
-const CHARACTER_ROTATION_ACCEL = 6; // smoothing factor
-const SCROLL_ROTATION_IMPULSE = 0.6;
+const CHARACTER_ROTATION_ACCEL = 5; // smoothing factor
+const SCROLL_ROTATION_IMPULSE = 0.4;
 const SCROLL_ROTATION_STEP = 0.05; // legacy for impulse magnitude scaling
 const TOUCH_SCROLL_STEP = 12; // px delta per impulse on touch devices
 
@@ -31,6 +49,7 @@ canvas.style.backgroundColor = '#05000c';
 
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText = document.getElementById('loading-text');
+const loadingProgress = document.getElementById('loading-progress');
 const lorePanel = document.getElementById('lore-panel');
 const lorePanelTitle = document.getElementById('lore-panel-title');
 const lorePanelBody = document.getElementById('lore-panel-body');
@@ -39,14 +58,43 @@ const hotspotButtons = Array.from(document.querySelectorAll('.hotspot-btn'));
 if (loadingOverlay) {
     document.body.classList.add('is-loading');
 }
+const LOADING_MESSAGES = [
+    'Brewing the magic...',
+    'Forging aurora circuits...',
+    'Polishing portal lenses...',
+    'Tuning orbital relays...'
+];
+let loadingMessageIndex = 0;
+let loadingMessageInterval = null;
+
+function startLoadingMessages() {
+    if (!loadingText) return;
+    loadingText.textContent = LOADING_MESSAGES[0];
+    loadingMessageInterval = window.setInterval(() => {
+        loadingMessageIndex = (loadingMessageIndex + 1) % LOADING_MESSAGES.length;
+        loadingText.textContent = LOADING_MESSAGES[loadingMessageIndex];
+    }, 2600);
+}
+
+function stopLoadingMessages() {
+    if (loadingMessageInterval) {
+        clearInterval(loadingMessageInterval);
+        loadingMessageInterval = null;
+    }
+}
+
+if (loadingText) {
+    startLoadingMessages();
+}
 
 const loadingManager = new THREE.LoadingManager();
 let overlayDismissed = false;
 function dismissLoadingOverlay(message) {
     if (overlayDismissed) return;
     overlayDismissed = true;
-    if (message && loadingText) {
-        loadingText.textContent = message;
+    stopLoadingMessages();
+    if (message && loadingProgress) {
+        loadingProgress.textContent = message;
     }
     document.body.classList.remove('is-loading');
     if (loadingOverlay) {
@@ -60,25 +108,58 @@ function dismissLoadingOverlay(message) {
 }
 
 loadingManager.onStart = () => {
-    if (loadingText) {
-        loadingText.textContent = 'Loading 0%';
+    if (loadingProgress) {
+        loadingProgress.textContent = 'Loading 0%';
     }
 };
 
 loadingManager.onProgress = (_url, itemsLoaded, itemsTotal) => {
-    if (!loadingText || !itemsTotal) return;
+    if (!loadingProgress || !itemsTotal) return;
     const percent = Math.round((itemsLoaded / itemsTotal) * 100);
-    loadingText.textContent = `Loading ${percent}%`;
+    loadingProgress.textContent = `Loading ${percent}%`;
 };
 
+function compileView() {
+    if (renderer.compileAsync) {
+        return renderer.compileAsync(scene, camera);
+    }
+    renderer.compile(scene, camera);
+    return Promise.resolve();
+}
+
+async function finalizeLoading() {
+    const originalPosition = camera.position.clone();
+    const originalQuaternion = camera.quaternion.clone();
+    const originalUp = camera.up.clone();
+
+    const angles = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2];
+    const previewDistance = WALKWAY_RADIUS + 14;
+    for (const angle of angles) {
+        camera.position.set(
+            Math.cos(angle) * previewDistance,
+            7,
+            Math.sin(angle) * previewDistance
+        );
+        camera.lookAt(0, 0, 0);
+        await compileView();
+    }
+
+    camera.position.copy(originalPosition);
+    camera.quaternion.copy(originalQuaternion);
+    camera.up.copy(originalUp);
+    return compileView();
+}
+
 loadingManager.onLoad = () => {
-    dismissLoadingOverlay('Loading complete');
+    finalizeLoading()
+        .catch((err) => console.warn('Renderer compile failed', err))
+        .finally(() => dismissLoadingOverlay('Loading complete'));
 };
 
 loadingManager.onError = (url) => {
-    if (loadingText) {
+    if (loadingProgress) {
         const label = url ? url.split('/').pop() : 'asset';
-        loadingText.textContent = `Retrying ${label}...`;
+        loadingProgress.textContent = `Retrying ${label}...`;
     }
 };
 
@@ -92,7 +173,7 @@ const camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 100);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, DEVICE_PIXEL_RATIO_LIMIT));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 // Enable shadows
@@ -175,48 +256,13 @@ let globeRotationSpeed = 0; // radians per second
 
 // ========== WALKWAY (TORUS AROUND EQUATOR) ==========
 // Create a thin torus around the equator of the globe
-const WALKWAY_RADIUS = GLOBE_RADIUS + 3.0; // Further from globe for full visibility
+const WALKWAY_RADIUS = GLOBE_RADIUS + 5.5; // pushed further for more breathing room
 const RING_INNER_RADIUS = WALKWAY_RADIUS - 1.6;
 const RING_OUTER_RADIUS = WALKWAY_RADIUS + 1.8;
 const WALKWAY_WIDTH = 1.6;
 const EFFECT_INNER_RADIUS = RING_INNER_RADIUS - 1.5;
 const EFFECT_OUTER_RADIUS = RING_OUTER_RADIUS + 1.6;
 let currentDayNightFactor = 0.5;
-
-const WEATHER_ZONES = [
-    {
-        name: 'aurora',
-        startAngle: 0,
-        arcLength: Math.PI / 2,
-        particleColor: 0xb0f0ff,
-        fogColor: '#8fd3ff',
-        lightColor: 0x8fe0ff
-    },
-    {
-        name: 'storm',
-        startAngle: Math.PI / 2,
-        arcLength: Math.PI / 2,
-        particleColor: 0x8ab6ff,
-        fogColor: '#5a5b8e',
-        lightColor: 0x7388ff
-    },
-    {
-        name: 'desert',
-        startAngle: Math.PI,
-        arcLength: Math.PI / 2,
-        particleColor: 0xffcd75,
-        fogColor: '#ffda9c',
-        lightColor: 0xffc266
-    },
-    {
-        name: 'mist',
-        startAngle: 3 * Math.PI / 2,
-        arcLength: Math.PI / 2,
-        particleColor: 0xd1b0ff,
-        fogColor: '#c4a2ff',
-        lightColor: 0xdcb0ff
-    }
-];
 
 function createRingMesh(innerRadius, width, color, emissiveColor, emissiveIntensity, height) {
     const geometry = new THREE.RingGeometry(innerRadius - width / 2, innerRadius + width / 2, 96);
@@ -305,13 +351,28 @@ function addRingParticles(baseRadius, height, color, count, verticalRange) {
     return points;
 }
 
-const innerEffectParticles = addRingParticles(EFFECT_INNER_RADIUS, effectInnerRing.position.y, 0x41ffff, 140, 0.55);
-const outerEffectParticles = addRingParticles(EFFECT_OUTER_RADIUS, effectOuterRing.position.y, 0xffa8ff, 160, 0.75);
+const innerEffectParticles = addRingParticles(
+    EFFECT_INNER_RADIUS,
+    effectInnerRing.position.y,
+    0x41ffff,
+    Math.max(70, Math.round(140 * PARTICLE_COUNT_SCALE)),
+    0.55
+);
+const outerEffectParticles = addRingParticles(
+    EFFECT_OUTER_RADIUS,
+    effectOuterRing.position.y,
+    0xffa8ff,
+    Math.max(80, Math.round(160 * PARTICLE_COUNT_SCALE)),
+    0.75
+);
 
-const weatherSystems = [];
 let globalAtmosphereParticles = null;
 let globalPixelParticles = null;
 const floatingElements = [];
+const floatingCrystalRocks = [];
+const floatingMagicClusters = [];
+const auroraBands = [];
+let auroraRing = null;
 const ambientAIs = [];
 const worldProps = [];
 const forestInstances = [];
@@ -327,6 +388,8 @@ let activeLoreMarker = null;
 const FLOATING_ASSET_MAX_ANGLE = Math.PI * 0.75;
 const FAR_VISIBILITY_DISTANCE = WALKWAY_RADIUS + 18;
 const EXTENDED_VISIBILITY_DISTANCE = WALKWAY_RADIUS + 24;
+const PROP_MIN_VISIBILITY_DISTANCE = WALKWAY_RADIUS + 1;
+const MAX_PROP_VISIBILITY_DISTANCE = EXTENDED_VISIBILITY_DISTANCE + 6;
 const LORE_MARKER_DEFS = [
     { id: 'about', title: 'About Us', glow: '#6bb9ff', icon: 'info' },
     { id: 'projects', title: 'Clients & Case Studies', glow: '#7de28f', icon: 'folder' },
@@ -362,6 +425,20 @@ const gltfLoader = new GLTFLoader(loadingManager);
 const gltfCache = new Map();
 const treeAssetCache = new Map();
 const forestGlowUniforms = { time: { value: 0 } };
+const auroraUniforms = { time: { value: 0 } };
+
+function ensureMaterialTextures(material) {
+    if (!material) return;
+    const materials = Array.isArray(material) ? material : [material];
+    materials.forEach((mat) => {
+        ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap'].forEach((key) => {
+            if (mat[key] && mat[key].isTexture) {
+                mat[key].colorSpace = THREE.SRGBColorSpace;
+                mat[key].needsUpdate = true;
+            }
+        });
+    });
+}
 
 function loadGLTFClone(path, onReady, onError) {
     if (gltfCache.has(path)) {
@@ -376,6 +453,7 @@ function loadGLTFClone(path, onReady, onError) {
                 if (child.isMesh) {
                     child.castShadow = true;
                     child.receiveShadow = true;
+                    ensureMaterialTextures(child.material);
                 }
             });
             gltfCache.set(path, gltf.scene);
@@ -389,6 +467,7 @@ function loadGLTFClone(path, onReady, onError) {
         }
     );
 }
+
 
 function createInstancedForest(treePath, count, radius, height, tiltAngle = 0.12, tiltDirection = 1, scaleMultiplier = 1) {
     const buildInstances = (asset) => {
@@ -497,7 +576,7 @@ function createInstancedForest(treePath, count, radius, height, tiltAngle = 0.12
     );
 }
 
-function createDancingJellyTrees(count = 6) {
+function createDancingJellyTrees(count = Math.max(2, Math.round(5 * DECOR_COUNT_SCALE))) {
     for (let i = 0; i < count; i++) {
         gltfLoader.load(
             '/assets/dancing_jelly_tree.glb',
@@ -550,7 +629,7 @@ function createDancingJellyTrees(count = 6) {
 }
 
 function createGlobalPixelParticles() {
-    const count = 220;
+    const count = Math.max(60, Math.round(220 * PARTICLE_COUNT_SCALE));
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
     const basePositions = new Float32Array(count * 3);
@@ -584,63 +663,8 @@ function createGlobalPixelParticles() {
     globalPixelParticles.userData = { basePositions, amplitudes, speeds };
     scene.add(globalPixelParticles);
 }
-function createWeatherZones() {
-    WEATHER_ZONES.forEach(zone => {
-        const group = new THREE.Group();
-        group.position.y = effectOuterRing.position.y + 0.1;
-
-        const particleCount = 140;
-        const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
-        const speeds = [];
-        for (let i = 0; i < particleCount; i++) {
-            const angle = zone.startAngle + Math.random() * zone.arcLength;
-            const radius = EFFECT_OUTER_RADIUS + (Math.random() - 0.5) * 0.6;
-            positions[i * 3] = Math.cos(angle) * radius;
-            positions[i * 3 + 1] = (Math.random() - 0.5) * 1.5;
-            positions[i * 3 + 2] = Math.sin(angle) * radius;
-            speeds.push(0.2 + Math.random() * 0.3);
-        }
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const material = new THREE.PointsMaterial({
-            color: zone.particleColor,
-            size: 0.18,
-            transparent: true,
-            opacity: 0.65,
-            depthWrite: false
-        });
-        const particles = new THREE.Points(geometry, material);
-        particles.userData = { speeds, baseRadius: EFFECT_OUTER_RADIUS, zone };
-        group.add(particles);
-
-        const fogGeometry = new THREE.RingGeometry(
-            EFFECT_OUTER_RADIUS - 0.3,
-            EFFECT_OUTER_RADIUS + 0.8,
-            96
-        );
-        const fogMaterial = new THREE.MeshBasicMaterial({
-            color: zone.fogColor,
-            transparent: true,
-            opacity: 0.25,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-        const fogMesh = new THREE.Mesh(fogGeometry, fogMaterial);
-        fogMesh.rotation.x = Math.PI / 2;
-        fogMesh.position.y = 0;
-        group.add(fogMesh);
-
-        const ambient = new THREE.PointLight(zone.lightColor, 0.35, 40);
-        ambient.position.set(0, 2, 0);
-        group.add(ambient);
-
-        scene.add(group);
-        weatherSystems.push({ particles, group, zoneAngle: zone.startAngle + zone.arcLength / 2 });
-    });
-}
-
 function createGlobalAtmosphereParticles() {
-    const count = 180;
+    const count = Math.max(80, Math.round(180 * PARTICLE_COUNT_SCALE));
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
     const speeds = [];
@@ -674,7 +698,8 @@ function createFloatingElements() {
         transparent: true,
         opacity: 0.8
     });
-    for (let i = 0; i < 8; i++) {
+    const floatingCount = Math.max(2, Math.round(6 * DECOR_COUNT_SCALE));
+    for (let i = 0; i < floatingCount; i++) {
         const mesh = new THREE.Mesh(elementGeometry, elementMaterial.clone());
         mesh.material.emissiveIntensity = 0.3 + Math.random() * 0.2;
         mesh.position.set(0, 0, 0);
@@ -687,6 +712,176 @@ function createFloatingElements() {
         scene.add(mesh);
         floatingElements.push(mesh);
     }
+}
+
+function createAuroraBands() {
+    const baseRadius = EFFECT_OUTER_RADIUS + 8;
+    const vertexShader = `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `;
+    const auroraFragmentShader = `
+        uniform vec3 colorA;
+        uniform vec3 colorB;
+        uniform vec3 colorC;
+        uniform float time;
+        varying vec2 vUv;
+        void main() {
+            float wave = sin((vUv.x * 6.0) + time * 0.4) * 0.2 + sin((vUv.x * 14.0) - time * 0.7) * 0.08;
+            float gradient = smoothstep(0.0, 0.35, vUv.y) * smoothstep(1.0, 0.55, vUv.y);
+            float alpha = clamp((gradient + wave) * 0.85, 0.0, 1.0);
+            vec3 blend1 = mix(colorA, colorB, clamp(vUv.y + wave * 0.3, 0.0, 1.0));
+            vec3 blend2 = mix(colorB, colorC, clamp(vUv.y + wave * 0.2, 0.0, 1.0));
+            vec3 color = mix(blend1, blend2, 0.5 + 0.5 * sin(time * 0.2));
+            gl_FragColor = vec4(color, alpha);
+        }
+    `;
+    const geometry = new THREE.CylinderGeometry(
+        baseRadius + 0.5,
+        baseRadius - 0.5,
+        6.5,
+        84,
+        1,
+        true
+    );
+    const uniforms = {
+        colorA: { value: new THREE.Color(0x7efbff) },
+        colorB: { value: new THREE.Color(0xb58cff) },
+        colorC: { value: new THREE.Color(0x8cffcf) },
+        time: auroraUniforms.time
+    };
+    const material = new THREE.ShaderMaterial({
+        uniforms,
+        vertexShader,
+        fragmentShader: auroraFragmentShader,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide
+    });
+    auroraRing = new THREE.Mesh(geometry, material);
+    auroraRing.position.y = 4.6;
+    auroraRing.renderOrder = 2;
+    scene.add(auroraRing);
+    auroraBands.push({
+        mesh: auroraRing,
+        baseHeight: auroraRing.position.y,
+        wobble: 0.35,
+        speed: 0.12,
+        offset: 0,
+        centerAngle: 0
+    });
+}
+function scaleSceneToSize(scene, desiredSize) {
+    const box = new THREE.Box3().setFromObject(scene);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDimension = Math.max(size.x, size.y, size.z, 0.0001);
+    const scale = desiredSize / maxDimension;
+    scene.scale.setScalar(scale);
+}
+
+function spawnFloatingArtifacts({
+    path,
+    count,
+    desiredSize,
+    radiusMin,
+    radiusMax,
+    heightMin,
+    heightMax,
+    bobMin,
+    bobMax,
+    angularSpeedMin,
+    angularSpeedMax,
+    bobSpeedMin,
+    bobSpeedMax,
+    spinSpeedMin,
+    spinSpeedMax,
+    collection
+}) {
+    for (let i = 0; i < count; i++) {
+        loadGLTFClone(path, (model) => {
+            scaleSceneToSize(model, desiredSize);
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = false;
+                    child.receiveShadow = false;
+                }
+            });
+            const radius = THREE.MathUtils.lerp(radiusMin, radiusMax, Math.random());
+            const angle = Math.random() * Math.PI * 2;
+            const baseHeight = THREE.MathUtils.lerp(heightMin, heightMax, Math.random());
+            const bobAmount = THREE.MathUtils.lerp(bobMin, bobMax, Math.random());
+            const bobSpeed = THREE.MathUtils.lerp(bobSpeedMin, bobSpeedMax, Math.random());
+            const angularSpeed = THREE.MathUtils.lerp(angularSpeedMin, angularSpeedMax, Math.random());
+            const spinSpeed = THREE.MathUtils.lerp(spinSpeedMin, spinSpeedMax, Math.random());
+            const offset = Math.random() * Math.PI * 2;
+            model.position.set(
+                Math.cos(angle) * radius,
+                baseHeight,
+                Math.sin(angle) * radius
+            );
+            model.rotation.y = angle;
+            scene.add(model);
+            collection.push({
+                mesh: model,
+                radius,
+                baseHeight,
+                bobAmount,
+                bobSpeed,
+                angularSpeed,
+                spinSpeed,
+                offset
+            });
+        }, (err) => console.warn(`Failed to load floating artifact ${path}`, err));
+    }
+}
+
+function placeCrystalDrifts() {
+    const bufferDistance = EFFECT_OUTER_RADIUS + 2.5;
+    spawnFloatingArtifacts({
+        path: '/assets/crystal_stone_rock.glb',
+        count: CRYSTAL_DRIFT_COUNT,
+        desiredSize: 1.4,
+        radiusMin: bufferDistance,
+        radiusMax: EFFECT_OUTER_RADIUS + 6.5,
+        heightMin: 1.6,
+        heightMax: 4.2,
+        bobMin: 0.25,
+        bobMax: 0.6,
+        angularSpeedMin: 0.05,
+        angularSpeedMax: 0.18,
+        bobSpeedMin: 0.4,
+        bobSpeedMax: 0.8,
+        spinSpeedMin: 0.1,
+        spinSpeedMax: 0.35,
+        collection: floatingCrystalRocks
+    });
+}
+
+function placeMagicCrystalClusters() {
+    const bufferDistance = EFFECT_OUTER_RADIUS + 3.5;
+    spawnFloatingArtifacts({
+        path: '/assets/magic_crystals.glb',
+        count: MAGIC_CLUSTER_COUNT,
+        desiredSize: 1.0,
+        radiusMin: bufferDistance,
+        radiusMax: EFFECT_OUTER_RADIUS + 7.2,
+        heightMin: 2.2,
+        heightMax: 5.5,
+        bobMin: 0.35,
+        bobMax: 0.8,
+        angularSpeedMin: 0.08,
+        angularSpeedMax: 0.22,
+        bobSpeedMin: 0.6,
+        bobSpeedMax: 1.1,
+        spinSpeedMin: 0.2,
+        spinSpeedMax: 0.5,
+        collection: floatingMagicClusters
+    });
 }
 
 function placeForestShrine() {
@@ -767,12 +962,14 @@ function placeVoyager() {
     });
 }
 
-createWeatherZones();
 createGlobalAtmosphereParticles();
 createGlobalPixelParticles();
 placeForestShrine();
 placeMagicGate();
 placeVoyager();
+createAuroraBands();
+placeCrystalDrifts();
+placeMagicCrystalClusters();
 const FOREST_RING_SETUPS = {
     inner: {
         radius: EFFECT_INNER_RADIUS + 0.45,
@@ -785,11 +982,12 @@ const FOREST_RING_SETUPS = {
         tiltDirection: 1
     }
 };
+const scaleForestCount = (value) => Math.max(12, Math.round(value * FOREST_DENSITY_SCALE));
 const FOREST_TREE_DEFS = [
-    { path: '/assets/Tree_Green.glb', innerCount: 32, outerCount: 38 },
-    { path: '/assets/Tree_Orange.glb', innerCount: 30, outerCount: 36 },
-    { path: '/assets/Tree_Purple.glb', innerCount: 28, outerCount: 34 },
-    { path: '/assets/Tree_Yellow.glb', innerCount: 30, outerCount: 32 }
+    { path: '/assets/Tree_Green.glb', innerCount: scaleForestCount(32), outerCount: scaleForestCount(38) },
+    { path: '/assets/Tree_Orange.glb', innerCount: scaleForestCount(30), outerCount: scaleForestCount(36) },
+    { path: '/assets/Tree_Purple.glb', innerCount: scaleForestCount(28), outerCount: scaleForestCount(34) },
+    { path: '/assets/Tree_Yellow.glb', innerCount: scaleForestCount(30), outerCount: scaleForestCount(32) }
 ];
 FOREST_TREE_DEFS.forEach((tree) => {
     if (tree.outerCount) {
@@ -810,7 +1008,8 @@ wireLoreUI();
 
 function createAmbientAI() {
     const aiGeometry = new THREE.CapsuleGeometry(0.15, 0.4, 4, 8);
-    for (let i = 0; i < 6; i++) {
+    const aiCount = Math.max(3, Math.round(6 * DECOR_COUNT_SCALE));
+    for (let i = 0; i < aiCount; i++) {
         const material = new THREE.MeshStandardMaterial({
             color: 0x9be7ff,
             emissive: 0x6fd2ff,
@@ -932,8 +1131,18 @@ function pickLoreMarker() {
     return getMarkerFromObject(intersects[0].object);
 }
 
+let lorePointerDirty = false;
+let lastPointerEvent = null;
+
 function handleLorePointerMove(event) {
-    updatePointerFromEvent(event);
+    lastPointerEvent = event;
+    lorePointerDirty = true;
+}
+
+function processLorePointerMove() {
+    if (!lorePointerDirty || !lastPointerEvent) return;
+    lorePointerDirty = false;
+    updatePointerFromEvent(lastPointerEvent);
     const marker = pickLoreMarker();
     hoveredLoreMarker = marker;
     if (!loreMarkerPinned) {
@@ -1048,42 +1257,6 @@ function wireLoreUI() {
     });
 }
 
-function getWeatherZoneByAngle(angle) {
-    const normalized = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-    return WEATHER_ZONES.find(zone =>
-        normalized >= zone.startAngle && normalized < zone.startAngle + zone.arcLength
-    ) || WEATHER_ZONES[0];
-}
-
-const weatherInteractionGroup = new THREE.Group();
-const splashGeometry = new THREE.BufferGeometry().setFromPoints(new Array(60).fill(0).map(() => new THREE.Vector3()));
-const splashMaterial = new THREE.PointsMaterial({
-    color: 0xffffff,
-    size: 0.12,
-    transparent: true,
-    opacity: 0.7,
-    depthWrite: false
-});
-const splashParticles = new THREE.Points(splashGeometry, splashMaterial);
-weatherInteractionGroup.add(splashParticles);
-scene.add(weatherInteractionGroup);
-
-function updateWeatherInteraction(zone) {
-    weatherInteractionGroup.position.copy(character.position);
-    weatherInteractionGroup.position.y = character.position.y + 0.1;
-    const positions = splashParticles.geometry.attributes.position.array;
-    for (let i = 0; i < positions.length / 3; i++) {
-        const radius = 0.6 + Math.random() * 0.3;
-        const angle = Math.random() * Math.PI * 2;
-        positions[i * 3] = Math.cos(angle) * radius;
-        positions[i * 3 + 1] = (Math.random() - 0.5) * 0.2;
-        positions[i * 3 + 2] = Math.sin(angle) * radius;
-    }
-    splashParticles.geometry.attributes.position.needsUpdate = true;
-    splashMaterial.color.setHex(zone.particleColor);
-    splashMaterial.opacity = 0.3 + Math.random() * 0.2;
-}
-
 function createHemisphereMaskTexture() {
     const size = 512;
     const canvasMask = document.createElement('canvas');
@@ -1134,9 +1307,17 @@ let characterAngle = 0;
 const CHARACTER_HEIGHT = CHARACTER_SIZE * 0.75; // Half the character height
 let keyMovementDirection = 0; // -1 clockwise, +1 counter-clockwise
 let scrollImpulse = 0;
+let pendingScrollDelta = 0;
+let lastWheelEventTime = 0;
+const SCROLL_IMPULSE_DECAY = 0.92;
+const MAX_SCROLL_IMPULSE = 1.2;
 let lastTouchY = null;
 const activeMovementKeys = new Set();
 let currentAngularSpeed = 0;
+let isMovementActive = false;
+let idleTimer = 0;
+const MOVEMENT_IDLE_THRESHOLD = 0.04;
+const MOVEMENT_IDLE_TIMEOUT = 0.35; // seconds
 
 function updateKeyMovementDirection() {
     if (activeMovementKeys.has('ArrowRight')) {
@@ -1162,12 +1343,16 @@ window.addEventListener('keyup', (event) => {
     }
 });
 
+function queueScrollImpulse(delta) {
+    pendingScrollDelta = THREE.MathUtils.clamp(pendingScrollDelta + delta, -MAX_SCROLL_IMPULSE, MAX_SCROLL_IMPULSE);
+}
+
 renderer.domElement.addEventListener('wheel', (event) => {
     event.preventDefault();
-    if (event.deltaY > 0) {
-        scrollImpulse -= SCROLL_ROTATION_IMPULSE; // scroll down => clockwise
-    } else if (event.deltaY < 0) {
-        scrollImpulse += SCROLL_ROTATION_IMPULSE; // scroll up => counter-clockwise
+    lastWheelEventTime = performance.now();
+    const delta = event.deltaY > 0 ? -SCROLL_ROTATION_IMPULSE : event.deltaY < 0 ? SCROLL_ROTATION_IMPULSE : 0;
+    if (delta !== 0) {
+        queueScrollImpulse(delta);
     }
 }, { passive: false });
 
@@ -1184,7 +1369,9 @@ renderer.domElement.addEventListener('touchmove', (event) => {
     if (Math.abs(deltaY) >= TOUCH_SCROLL_STEP) {
         const steps = Math.floor(Math.abs(deltaY) / TOUCH_SCROLL_STEP);
         const direction = deltaY < 0 ? 1 : -1; // swipe up => forward
-        scrollImpulse += direction * SCROLL_ROTATION_IMPULSE * steps;
+        if (steps > 0) {
+            queueScrollImpulse(direction * SCROLL_ROTATION_IMPULSE * steps);
+        }
         lastTouchY = currentY;
     }
 }, { passive: false });
@@ -1237,13 +1424,30 @@ const cameraDesiredPos = new THREE.Vector3();
 
 // Character animation - moves along equator path
 function updateCharacter(dt) {
-    const targetAngularSpeed = keyMovementDirection * CHARACTER_BASE_ROTATION_SPEED + scrollImpulse;
-    scrollImpulse = 0;
+    scrollImpulse = THREE.MathUtils.damp(scrollImpulse, pendingScrollDelta, 8, dt);
+    pendingScrollDelta *= SCROLL_IMPULSE_DECAY;
+    if (Math.abs(pendingScrollDelta) < 0.01) pendingScrollDelta = 0;
+    const desiredSpeed = keyMovementDirection * CHARACTER_BASE_ROTATION_SPEED + scrollImpulse;
+    const maxSpeed = 0.65;
+    const targetAngularSpeed = THREE.MathUtils.clamp(desiredSpeed, -maxSpeed, maxSpeed);
     const blend = Math.min(1, CHARACTER_ROTATION_ACCEL * dt);
     currentAngularSpeed += (targetAngularSpeed - currentAngularSpeed) * blend;
     characterAngle += currentAngularSpeed * dt;
-    if (Math.abs(currentAngularSpeed) > 0.0005) {
-        cameraFollowDirection = currentAngularSpeed > 0 ? 1 : -1;
+    const wasActive = isMovementActive;
+    isMovementActive = Math.abs(currentAngularSpeed) > MOVEMENT_IDLE_THRESHOLD;
+    if (isMovementActive) {
+        idleTimer = 0;
+    } else if (wasActive) {
+        idleTimer += dt;
+        if (idleTimer > MOVEMENT_IDLE_TIMEOUT) {
+            isMovementActive = false;
+        }
+    }
+    const directionThreshold = 0.08;
+    if (currentAngularSpeed > directionThreshold) {
+        cameraFollowDirection = 1;
+    } else if (currentAngularSpeed < -directionThreshold) {
+        cameraFollowDirection = -1;
     }
     
     // Get position on equator
@@ -1257,9 +1461,6 @@ function updateCharacter(dt) {
         position.z
     );
 
-    const zone = getWeatherZoneByAngle(normalizedAngle);
-    updateWeatherInteraction(zone);
-    
     // Calculate forward direction (tangent to the circle)
     const forward = new THREE.Vector3(-Math.sin(characterAngle), 0, Math.cos(characterAngle));
     
@@ -1395,19 +1596,19 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
 directionalLight.position.set(10, 20, 10);
 directionalLight.castShadow = true;
 // Configure shadow properties for better quality
-directionalLight.shadow.mapSize.width = 2048;
-directionalLight.shadow.mapSize.height = 2048;
+directionalLight.shadow.mapSize.width = IS_LOW_POWER_DEVICE ? 1024 : 2048;
+directionalLight.shadow.mapSize.height = IS_LOW_POWER_DEVICE ? 1024 : 2048;
 directionalLight.shadow.camera.near = 0.5;
 directionalLight.shadow.camera.far = 50;
 directionalLight.shadow.camera.left = -20;
 directionalLight.shadow.camera.right = 20;
 directionalLight.shadow.camera.top = 20;
 directionalLight.shadow.camera.bottom = -20;
-directionalLight.shadow.bias = -0.0001;
+directionalLight.shadow.bias = IS_LOW_POWER_DEVICE ? -0.0004 : -0.0001;
 scene.add(directionalLight);
 
 // Optional magical overhead point light
-const pointLight = new THREE.PointLight(0x9c7eff, 0.8);
+const pointLight = new THREE.PointLight(0x9c7eff, IS_LOW_POWER_DEVICE ? 0.4 : 0.8);
 pointLight.position.set(0, 10, 0);
 scene.add(pointLight);
 
@@ -1442,7 +1643,7 @@ function createSummerSection() {
     
     // Fireflies (particles)
     const fireflyGeometry = new THREE.BufferGeometry();
-    const fireflyCount = 50;
+    const fireflyCount = Math.max(20, Math.round(50 * PARTICLE_COUNT_SCALE));
     const fireflyPositions = new Float32Array(fireflyCount * 3);
     const fireflyVelocities = [];
     
@@ -1501,7 +1702,7 @@ function createRainSection() {
     
     // Rain particles
     const rainGeometry = new THREE.BufferGeometry();
-    const rainCount = 500;
+    const rainCount = Math.max(120, Math.round(500 * PARTICLE_COUNT_SCALE));
     const rainPositions = new Float32Array(rainCount * 3);
     const rainVelocities = [];
     
@@ -1585,7 +1786,7 @@ function createAutumnSection() {
     
     // Falling leaves (particles)
     const leafGeometry = new THREE.BufferGeometry();
-    const leafCount = 200;
+    const leafCount = Math.max(80, Math.round(200 * PARTICLE_COUNT_SCALE));
     const leafPositions = new Float32Array(leafCount * 3);
     const leafVelocities = [];
     
@@ -1653,7 +1854,7 @@ function createWinterSection() {
     
     // Snow particles (2000+)
     const snowGeometry = new THREE.BufferGeometry();
-    const snowCount = 2000;
+    const snowCount = Math.max(300, Math.round(2000 * PARTICLE_COUNT_SCALE));
     const snowPositions = new Float32Array(snowCount * 3);
     const snowVelocities = [];
     
@@ -1879,7 +2080,10 @@ function angularDifference(a, b) {
 function updateAssetVisibility() {
     const focusAngle = THREE.MathUtils.euclideanModulo(characterAngle, Math.PI * 2);
     worldProps.forEach(({ object, angle }) => {
-        object.visible = angularDifference(angle, focusAngle) <= Math.PI * 0.95;
+        const radialDistance = Math.hypot(object.position.x, object.position.z);
+        object.visible =
+            angularDifference(angle, focusAngle) <= Math.PI * 0.95 &&
+            radialDistance <= MAX_PROP_VISIBILITY_DISTANCE;
     });
 
     floatingElements.forEach((mesh) => {
@@ -1888,6 +2092,7 @@ function updateAssetVisibility() {
         const radialDistance = Math.hypot(pos.x, pos.z);
         const visible =
             angularDifference(assetAngle, focusAngle) <= FLOATING_ASSET_MAX_ANGLE &&
+            radialDistance >= PROP_MIN_VISIBILITY_DISTANCE &&
             radialDistance <= FAR_VISIBILITY_DISTANCE;
         mesh.visible = visible;
     });
@@ -1898,6 +2103,7 @@ function updateAssetVisibility() {
         const radialDistance = Math.hypot(pos.x, pos.z);
         const visible =
             angularDifference(assetAngle, focusAngle) <= FLOATING_ASSET_MAX_ANGLE &&
+            radialDistance >= PROP_MIN_VISIBILITY_DISTANCE &&
             radialDistance <= FAR_VISIBILITY_DISTANCE;
         mesh.visible = visible;
     });
@@ -1908,22 +2114,41 @@ function updateAssetVisibility() {
         const radialDistance = Math.hypot(pos.x, pos.z);
         const visible =
             angularDifference(assetAngle, focusAngle) <= FLOATING_ASSET_MAX_ANGLE &&
-            radialDistance <= EXTENDED_VISIBILITY_DISTANCE + 6;
+            radialDistance >= PROP_MIN_VISIBILITY_DISTANCE &&
+            radialDistance <= MAX_PROP_VISIBILITY_DISTANCE;
         tree.mesh.visible = visible;
-    });
-
-    weatherSystems.forEach((system) => {
-        system.group.visible = angularDifference(system.zoneAngle, focusAngle) <= Math.PI * 0.85;
     });
 
     if (globalAtmosphereParticles) {
         const cameraDistance = Math.hypot(camera.position.x, camera.position.z);
         globalAtmosphereParticles.visible = cameraDistance <= EXTENDED_VISIBILITY_DISTANCE + 8;
     }
+
+    const evaluateVisibility = (mesh) => {
+        const pos = mesh.position;
+        const assetAngle = Math.atan2(pos.z, pos.x);
+        const radialDistance = Math.hypot(pos.x, pos.z);
+        return angularDifference(assetAngle, focusAngle) <= FLOATING_ASSET_MAX_ANGLE &&
+            radialDistance >= PROP_MIN_VISIBILITY_DISTANCE &&
+            radialDistance <= MAX_PROP_VISIBILITY_DISTANCE;
+    };
+
+    floatingCrystalRocks.forEach((artifact) => {
+        artifact.mesh.visible = evaluateVisibility(artifact.mesh);
+    });
+
+    floatingMagicClusters.forEach((artifact) => {
+        artifact.mesh.visible = evaluateVisibility(artifact.mesh);
+    });
+
+    auroraBands.forEach((band) => {
+        band.mesh.visible = angularDifference(band.centerAngle, focusAngle) <= FLOATING_ASSET_MAX_ANGLE;
+    });
 }
 
 function animateLoreMarkers(dt) {
     if (loreMarkers.length === 0) return;
+    if (isMovementActive) return;
     loreMarkers.forEach((marker, index) => {
         const t = totalTime * marker.bobSpeed + index;
         marker.group.position.y = marker.baseHeight + Math.sin(t) * marker.bobAmplitude;
@@ -1943,12 +2168,31 @@ function animateLoreMarkers(dt) {
 // ========== ANIMATION LOOP ==========
 let totalTime = 0;
 const clock = new THREE.Clock();
+let sparseParticleFrame = 0;
+
+function updateFloatingArtifactCollection(collection, dt) {
+    collection.forEach((artifact) => {
+        if (!artifact.mesh.visible) {
+            return;
+        }
+        const angle = totalTime * artifact.angularSpeed + artifact.offset;
+        artifact.mesh.position.set(
+            Math.cos(angle) * artifact.radius,
+            artifact.baseHeight + Math.sin(totalTime * artifact.bobSpeed + artifact.offset) * artifact.bobAmount,
+            Math.sin(angle) * artifact.radius
+        );
+        artifact.mesh.rotation.y += artifact.spinSpeed * dt;
+    });
+}
 
 function animate() {
     requestAnimationFrame(animate);
     const dt = clock.getDelta();
     totalTime += dt;
+    sparseParticleFrame = (sparseParticleFrame + 1) % PARTICLE_UPDATE_INTERVAL;
+    const shouldUpdateSparseParticles = sparseParticleFrame === 0;
     forestGlowUniforms.time.value = totalTime;
+    auroraUniforms.time.value = totalTime;
     
     // Rotate globe continuously
     globe.rotation.y += globeRotationSpeed * dt;
@@ -1961,7 +2205,7 @@ function animate() {
     
     // Update fireflies (summer)
     const fireflies = seasonGroups.summer.userData.fireflies;
-    if (fireflies) {
+    if (!isMovementActive && fireflies) {
         const positions = fireflies.points.geometry.attributes.position.array;
         fireflies.velocities.forEach((vel, i) => {
             positions[i * 3 + 1] += Math.sin(totalTime * vel.speed + vel.phase) * 0.01;
@@ -1972,7 +2216,7 @@ function animate() {
     
     // Update rain (rain section)
     const rain = seasonGroups.rain.userData.rain;
-    if (rain) {
+    if (!isMovementActive && shouldUpdateSparseParticles && rain) {
         const positions = rain.geometry.attributes.position.array;
         rain.velocities.forEach((vel, i) => {
             positions[i * 3 + 1] -= vel * dt;
@@ -1995,7 +2239,7 @@ function animate() {
     
     // Update falling leaves (autumn)
     const leaves = seasonGroups.autumn.userData.leaves;
-    if (leaves) {
+    if (!isMovementActive && shouldUpdateSparseParticles && leaves) {
         const positions = leaves.points.geometry.attributes.position.array;
         leaves.velocities.forEach((vel, i) => {
             positions[i * 3 + 1] -= vel.fallSpeed * dt;
@@ -2009,7 +2253,7 @@ function animate() {
     
     // Update snow (winter)
     const snow = seasonGroups.winter.userData.snow;
-    if (snow) {
+    if (!isMovementActive && shouldUpdateSparseParticles && snow) {
         const positions = snow.points.geometry.attributes.position.array;
         snow.velocities.forEach((vel, i) => {
             positions[i * 3 + 1] -= vel.fallSpeed * dt;
@@ -2032,34 +2276,38 @@ function animate() {
     updateSkyboxTexture(dt, currentDayNightFactor);
     
     // Update effect ring particles
-    [innerEffectParticles, outerEffectParticles].forEach((system) => {
-        if (!system) return;
-        const positions = system.geometry.attributes.position.array;
-        const speeds = system.userData.speeds;
-        for (let i = 0; i < speeds.length; i++) {
-            const angle = totalTime * speeds[i] + i;
-            positions[i * 3] = Math.cos(angle) * system.userData.baseRadius;
-            positions[i * 3 + 2] = Math.sin(angle) * system.userData.baseRadius;
-            positions[i * 3 + 1] = system.userData.height + Math.sin(angle) * system.userData.verticalRange * 0.5;
-        }
-        system.geometry.attributes.position.needsUpdate = true;
-    });
+    if (!isMovementActive && shouldUpdateSparseParticles) {
+        [innerEffectParticles, outerEffectParticles].forEach((system) => {
+            if (!system) return;
+            const positions = system.geometry.attributes.position.array;
+            const speeds = system.userData.speeds;
+            for (let i = 0; i < speeds.length; i++) {
+                const angle = totalTime * speeds[i] + i;
+                positions[i * 3] = Math.cos(angle) * system.userData.baseRadius;
+                positions[i * 3 + 2] = Math.sin(angle) * system.userData.baseRadius;
+                positions[i * 3 + 1] = system.userData.height + Math.sin(angle) * system.userData.verticalRange * 0.5;
+            }
+            system.geometry.attributes.position.needsUpdate = true;
+        });
+    }
     
     // Update weather zone particles
-    weatherSystems.forEach((system) => {
-        const positions = system.particles.geometry.attributes.position.array;
-        const speeds = system.particles.userData.speeds;
-        const baseRadius = system.particles.userData.baseRadius;
-        for (let i = 0; i < speeds.length; i++) {
-            const angle = totalTime * speeds[i] + i;
-            positions[i * 3] = Math.cos(angle) * baseRadius;
-            positions[i * 3 + 2] = Math.sin(angle) * baseRadius;
-        }
-        system.particles.geometry.attributes.position.needsUpdate = true;
-    });
+    if (!isMovementActive && shouldUpdateSparseParticles) {
+        weatherSystems.forEach((system) => {
+            const positions = system.particles.geometry.attributes.position.array;
+            const speeds = system.particles.userData.speeds;
+            const baseRadius = system.particles.userData.baseRadius;
+            for (let i = 0; i < speeds.length; i++) {
+                const angle = totalTime * speeds[i] + i;
+                positions[i * 3] = Math.cos(angle) * baseRadius;
+                positions[i * 3 + 2] = Math.sin(angle) * baseRadius;
+            }
+            system.particles.geometry.attributes.position.needsUpdate = true;
+        });
+    }
     
     // Global atmosphere drifting
-    if (globalAtmosphereParticles && globalAtmosphereParticles.visible) {
+    if (!isMovementActive && shouldUpdateSparseParticles && globalAtmosphereParticles && globalAtmosphereParticles.visible) {
         const positions = globalAtmosphereParticles.geometry.attributes.position.array;
         const speeds = globalAtmosphereParticles.userData.speeds;
         for (let i = 0; i < speeds.length; i++) {
@@ -2072,7 +2320,7 @@ function animate() {
         globalAtmosphereParticles.geometry.attributes.position.needsUpdate = true;
     }
     
-    if (globalPixelParticles) {
+    if (!isMovementActive && shouldUpdateSparseParticles && globalPixelParticles) {
         const positions = globalPixelParticles.geometry.attributes.position.array;
         const basePositions = globalPixelParticles.userData.basePositions;
         const amplitudes = globalPixelParticles.userData.amplitudes;
@@ -2086,6 +2334,9 @@ function animate() {
     
     // Floating sky elements
     floatingElements.forEach((mesh) => {
+        if (IS_LOW_POWER_DEVICE && !mesh.visible) {
+            return;
+        }
         const data = mesh.userData;
         const angle = totalTime * data.speed + data.offset;
         mesh.position.set(
@@ -2098,6 +2349,9 @@ function animate() {
     });
 
     ambientAIs.forEach((ai, idx) => {
+        if (IS_LOW_POWER_DEVICE && !ai.visible) {
+            return;
+        }
         const data = ai.userData;
         const angle = totalTime * data.speed + data.offset;
         ai.position.set(
@@ -2111,6 +2365,12 @@ function animate() {
     });
 
     dancingJellyTrees.forEach((tree) => {
+        if (IS_LOW_POWER_DEVICE && !tree.mesh.visible) {
+            if (tree.mixer) {
+                tree.mixer.update(0);
+            }
+            return;
+        }
         const angle = totalTime * tree.angularSpeed + tree.offset;
         tree.mesh.position.set(
             Math.cos(angle) * tree.radius,
@@ -2123,7 +2383,18 @@ function animate() {
         }
     });
 
+    auroraBands.forEach((band) => {
+        band.mesh.position.y = band.baseHeight + Math.sin(totalTime * band.speed + band.offset) * band.wobble;
+        band.mesh.rotation.y = totalTime * 0.01;
+    });
+
+    updateFloatingArtifactCollection(floatingCrystalRocks, dt);
+    updateFloatingArtifactCollection(floatingMagicClusters, dt);
+
     worldProps.forEach((prop) => {
+        if (IS_LOW_POWER_DEVICE && !prop.object.visible) {
+            return;
+        }
         const hoverOffset = Math.sin(totalTime * prop.hoverSpeed + prop.phase) * prop.hoverAmplitude;
         prop.object.position.y = prop.baseHeight + hoverOffset;
     });
@@ -2160,6 +2431,7 @@ function animate() {
     updateGlobalFog(dt);
     updateDayNightLight(totalTime);
     updatePerformanceControls();
+    updateInteractionSystems();
     if (ENABLE_BLOOM && bloomComposer) {
         renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
         renderer.autoClear = false;
@@ -2180,6 +2452,12 @@ window.addEventListener('resize', () => {
         bloomComposer.setSize(window.innerWidth, window.innerHeight);
     }
 });
+
+function updateInteractionSystems() {
+    if (!isMovementActive) {
+        processLorePointerMove();
+    }
+}
 
 // Start animation
 animate();
