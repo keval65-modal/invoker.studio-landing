@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoker Studio - Globe World</title>
     <style>
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;800&display=swap");
+
+        :root {
+            --bg: #05000c;
+            --clr-1: #00c2ff;
+            --clr-2: #33ff8c;
+            --clr-3: #ffc640;
+            --clr-4: #e54cff;
+            --blur: 1rem;
+            --fs: clamp(2.6rem, 7vw, 5.5rem);
+            --ls: clamp(-1.75px, -0.25vw, -3.5px);
+        }
         * {
             margin: 0;
             padding: 0;
@@ -12,7 +24,9 @@
         }
         body {
             overflow: hidden;
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: "Inter", "DM Sans", system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: #fff;
         }
         body.is-loading #ui,
         body.is-loading #hotspots {
@@ -74,10 +88,11 @@
         #loading-overlay {
             position: fixed;
             inset: 0;
-            background: radial-gradient(circle at 20% 20%, rgba(146, 108, 255, 0.25), rgba(5, 0, 12, 0.95));
+            background: radial-gradient(circle at 20% 20%, rgba(146, 108, 255, 0.2), rgba(5, 0, 12, 0.95));
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-direction: column;
             z-index: 1000;
             transition: opacity 0.45s ease;
             pointer-events: all;
@@ -91,49 +106,123 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 18px;
-            color: #f4e9ff;
-            letter-spacing: 0.04em;
-            animation: float 3s ease-in-out infinite;
-            max-width: 360px;
-            padding: 30px 36px;
-            background: rgba(10, 0, 20, 0.55);
-            border-radius: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 20px 60px rgba(5, 0, 12, 0.6);
+            gap: 16px;
+            padding: clamp(2.5rem, 6vw, 4rem);
+            max-width: 640px;
+            width: min(90vw, 700px);
+            position: relative;
         }
-        .loading-content h1 {
-            font-size: 32px;
-            margin-bottom: 6px;
+        .subtitle {
+            font-size: 1rem;
+            letter-spacing: 0.25rem;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.8);
         }
-        .loading-content .loading-desc {
-            font-size: 16px;
-            color: #e4d2ff;
-            opacity: 0.9;
+        .title {
+            font-size: var(--fs);
+            font-weight: 800;
+            letter-spacing: var(--ls);
+            position: relative;
+            overflow: hidden;
+            margin: 0;
+            text-shadow: 0 10px 45px rgba(0,0,0,0.6);
+        }
+        .loading-desc {
+            font-size: 1.1rem;
+            color: rgba(255,255,255,0.8);
+            max-width: 460px;
         }
         .loading-progress {
             font-size: 14px;
             color: #c8afff;
-        }
-        .loading-spinner {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            border: 4px solid rgba(255, 255, 255, 0.2);
-            border-top-color: #c58dff;
-            animation: spin 1s linear infinite;
+            letter-spacing: 0.1rem;
         }
         #loading-text {
-            font-size: 18px;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3rem;
+            color: rgba(255,255,255,0.85);
         }
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+        .loading-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 999px;
+            overflow: hidden;
+            position: relative;
         }
-        @keyframes float {
-            0% { transform: translateY(0); }
-            50% { transform: translateY(-6px); }
-            100% { transform: translateY(0); }
+        .loading-bar__fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--clr-1), var(--clr-4));
+            border-radius: 999px;
+            transition: width 0.3s ease;
+        }
+        .aurora {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            mix-blend-mode: screen;
+            z-index: -1;
+        }
+        .aurora__item {
+            position: absolute;
+            width: 60vw;
+            height: 60vw;
+            background-color: var(--clr-1);
+            border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%;
+            filter: blur(var(--blur));
+            mix-blend-mode: overlay;
+            opacity: 0.65;
+        }
+        .aurora__item:nth-of-type(1) {
+            top: -50%;
+            animation: aurora-border 6s ease-in-out infinite, aurora-1 12s ease-in-out infinite alternate;
+        }
+        .aurora__item:nth-of-type(2) {
+            background-color: var(--clr-3);
+            right: 0;
+            top: 0;
+            animation: aurora-border 6s ease-in-out infinite, aurora-2 12s ease-in-out infinite alternate;
+        }
+        .aurora__item:nth-of-type(3) {
+            background-color: var(--clr-2);
+            left: 0;
+            bottom: 0;
+            animation: aurora-border 6s ease-in-out infinite, aurora-3 8s ease-in-out infinite alternate;
+        }
+        .aurora__item:nth-of-type(4) {
+            background-color: var(--clr-4);
+            right: 0;
+            bottom: -50%;
+            animation: aurora-border 6s ease-in-out infinite, aurora-4 24s ease-in-out infinite alternate;
+        }
+        @keyframes aurora-1 {
+            0% { top: -20%; right: 0; }
+            50% { top: 80%; right: 60%; }
+            100% { top: -20%; right: 0; }
+        }
+        @keyframes aurora-2 {
+            0% { top: -40%; left: 0; }
+            60% { top: 70%; left: 65%; }
+            100% { top: -40%; left: 0; }
+        }
+        @keyframes aurora-3 {
+            0% { bottom: -10%; left: -10%; }
+            50% { bottom: 70%; left: 60%; }
+            100% { bottom: -10%; left: -10%; }
+        }
+        @keyframes aurora-4 {
+            0% { bottom: -40%; right: -10%; }
+            70% { bottom: 50%; right: 40%; }
+            100% { bottom: -40%; right: -10%; }
+        }
+        @keyframes aurora-border {
+            0% { border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%; }
+            25% { border-radius: 47% 29% 39% 49% / 61% 19% 66% 26%; }
+            50% { border-radius: 57% 23% 47% 72% / 63% 17% 66% 33%; }
+            75% { border-radius: 28% 49% 29% 100% / 93% 20% 64% 25%; }
+            100% { border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%; }
         }
         #lore-panel {
             position: fixed;
@@ -192,11 +281,22 @@
 </head>
 <body>
     <div id="loading-overlay" role="status" aria-live="polite">
+        <div class="aurora">
+            <div class="aurora__item"></div>
+            <div class="aurora__item"></div>
+            <div class="aurora__item"></div>
+            <div class="aurora__item"></div>
+        </div>
         <div class="loading-content">
-            <div class="loading-spinner" aria-hidden="true"></div>
-            <h1>Welcome to Invoker Studio</h1>
+            <p class="subtitle">Brewing the future</p>
+            <h1 class="title">
+                Welcome to<br/>Invoker Studio
+            </h1>
             <p class="loading-desc">We build immersive, story-driven applications and interactive worlds.</p>
             <p id="loading-text">Brewing the magic...</p>
+            <div class="loading-bar">
+                <div class="loading-bar__fill" id="loading-bar-fill"></div>
+            </div>
             <p id="loading-progress" class="loading-progress">Loading 0%</p>
         </div>
     </div>

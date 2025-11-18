@@ -42,6 +42,7 @@ const CHARACTER_ROTATION_ACCEL = 5; // smoothing factor
 const SCROLL_ROTATION_IMPULSE = 0.4;
 const SCROLL_ROTATION_STEP = 0.05; // legacy for impulse magnitude scaling
 const TOUCH_SCROLL_STEP = 12; // px delta per impulse on touch devices
+const TOUCH_DRAG_SENS = 1.1;
 
 // ========== SCENE SETUP ==========
 const canvas = document.getElementById('c');
@@ -1312,6 +1313,7 @@ let lastWheelEventTime = 0;
 const SCROLL_IMPULSE_DECAY = 0.92;
 const MAX_SCROLL_IMPULSE = 1.2;
 let lastTouchY = null;
+let lastTouchX = null;
 const activeMovementKeys = new Set();
 let currentAngularSpeed = 0;
 let isMovementActive = false;
@@ -1359,13 +1361,16 @@ renderer.domElement.addEventListener('wheel', (event) => {
 renderer.domElement.addEventListener('touchstart', (event) => {
     if (event.touches.length !== 1) return;
     lastTouchY = event.touches[0].clientY;
+    lastTouchX = event.touches[0].clientX;
 }, { passive: true });
 
 renderer.domElement.addEventListener('touchmove', (event) => {
-    if (event.touches.length !== 1 || lastTouchY === null) return;
+    if (event.touches.length !== 1 || lastTouchY === null || lastTouchX === null) return;
     event.preventDefault();
     const currentY = event.touches[0].clientY;
+    const currentX = event.touches[0].clientX;
     const deltaY = currentY - lastTouchY;
+    const deltaX = currentX - lastTouchX;
     if (Math.abs(deltaY) >= TOUCH_SCROLL_STEP) {
         const steps = Math.floor(Math.abs(deltaY) / TOUCH_SCROLL_STEP);
         const direction = deltaY < 0 ? 1 : -1; // swipe up => forward
@@ -1374,10 +1379,16 @@ renderer.domElement.addEventListener('touchmove', (event) => {
         }
         lastTouchY = currentY;
     }
+    if (Math.abs(deltaX) >= TOUCH_SCROLL_STEP) {
+        const horizontalRatio = THREE.MathUtils.clamp(deltaX / (window.innerWidth * 0.25), -1, 1);
+        queueScrollImpulse(-horizontalRatio * TOUCH_DRAG_SENS);
+        lastTouchX = currentX;
+    }
 }, { passive: false });
 
 const resetTouchScroll = () => {
     lastTouchY = null;
+    lastTouchX = null;
 };
 
 renderer.domElement.addEventListener('touchend', resetTouchScroll);
@@ -2171,6 +2182,7 @@ const clock = new THREE.Clock();
 let sparseParticleFrame = 0;
 
 function updateFloatingArtifactCollection(collection, dt) {
+    if (isMovementActive) return;
     collection.forEach((artifact) => {
         if (!artifact.mesh.visible) {
             return;
@@ -2333,55 +2345,57 @@ function animate() {
     }
     
     // Floating sky elements
-    floatingElements.forEach((mesh) => {
-        if (IS_LOW_POWER_DEVICE && !mesh.visible) {
-            return;
-        }
-        const data = mesh.userData;
-        const angle = totalTime * data.speed + data.offset;
-        mesh.position.set(
-            Math.cos(angle) * data.radius,
-            data.height + Math.sin(angle * 0.5) * 0.5,
-            Math.sin(angle) * data.radius
-        );
-        mesh.rotation.y += dt * 0.3;
-        mesh.rotation.x += dt * 0.15;
-    });
-
-    ambientAIs.forEach((ai, idx) => {
-        if (IS_LOW_POWER_DEVICE && !ai.visible) {
-            return;
-        }
-        const data = ai.userData;
-        const angle = totalTime * data.speed + data.offset;
-        ai.position.set(
-            Math.cos(angle) * data.radius,
-            data.height + Math.sin(angle * 0.7) * data.verticalSwing,
-            Math.sin(angle) * data.radius
-        );
-        ai.rotation.y = angle;
-        const pulse = 0.3 + Math.sin(angle + idx) * 0.2;
-        ai.material.emissiveIntensity = pulse;
-    });
-
-    dancingJellyTrees.forEach((tree) => {
-        if (IS_LOW_POWER_DEVICE && !tree.mesh.visible) {
-            if (tree.mixer) {
-                tree.mixer.update(0);
+    if (!isMovementActive) {
+        floatingElements.forEach((mesh) => {
+            if (IS_LOW_POWER_DEVICE && !mesh.visible) {
+                return;
             }
-            return;
-        }
-        const angle = totalTime * tree.angularSpeed + tree.offset;
-        tree.mesh.position.set(
-            Math.cos(angle) * tree.radius,
-            tree.baseHeight + Math.sin(totalTime * tree.bobSpeed + angle) * tree.bobAmount,
-            Math.sin(angle) * tree.radius
-        );
-        tree.mesh.rotation.y += dt * 0.25;
-        if (tree.mixer) {
-            tree.mixer.update(dt);
-        }
-    });
+            const data = mesh.userData;
+            const angle = totalTime * data.speed + data.offset;
+            mesh.position.set(
+                Math.cos(angle) * data.radius,
+                data.height + Math.sin(angle * 0.5) * 0.5,
+                Math.sin(angle) * data.radius
+            );
+            mesh.rotation.y += dt * 0.3;
+            mesh.rotation.x += dt * 0.15;
+        });
+
+        ambientAIs.forEach((ai, idx) => {
+            if (IS_LOW_POWER_DEVICE && !ai.visible) {
+                return;
+            }
+            const data = ai.userData;
+            const angle = totalTime * data.speed + data.offset;
+            ai.position.set(
+                Math.cos(angle) * data.radius,
+                data.height + Math.sin(angle * 0.7) * data.verticalSwing,
+                Math.sin(angle) * data.radius
+            );
+            ai.rotation.y = angle;
+            const pulse = 0.3 + Math.sin(angle + idx) * 0.2;
+            ai.material.emissiveIntensity = pulse;
+        });
+
+        dancingJellyTrees.forEach((tree) => {
+            if (IS_LOW_POWER_DEVICE && !tree.mesh.visible) {
+                if (tree.mixer) {
+                    tree.mixer.update(0);
+                }
+                return;
+            }
+            const angle = totalTime * tree.angularSpeed + tree.offset;
+            tree.mesh.position.set(
+                Math.cos(angle) * tree.radius,
+                tree.baseHeight + Math.sin(totalTime * tree.bobSpeed + angle) * tree.bobAmount,
+                Math.sin(angle) * tree.radius
+            );
+            tree.mesh.rotation.y += dt * 0.25;
+            if (tree.mixer) {
+                tree.mixer.update(dt);
+            }
+        });
+    }
 
     auroraBands.forEach((band) => {
         band.mesh.position.y = band.baseHeight + Math.sin(totalTime * band.speed + band.offset) * band.wobble;
