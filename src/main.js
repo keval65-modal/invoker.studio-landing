@@ -183,6 +183,25 @@ renderer.setClearColor('#05000c', 1);
 if (typeof window !== 'undefined') {
     window.renderer = renderer;
 }
+const fpsOverlay = document.getElementById('fps-overlay') || (() => {
+    const el = document.createElement('div');
+    el.id = 'fps-overlay';
+    el.style.position = 'fixed';
+    el.style.top = '20px';
+    el.style.right = '20px';
+    el.style.padding = '6px 10px';
+    el.style.fontSize = '12px';
+    el.style.fontFamily = 'monospace';
+    el.style.color = '#fff';
+    el.style.background = 'rgba(5,0,12,0.55)';
+    el.style.border = '1px solid rgba(255,255,255,0.2)';
+    el.style.borderRadius = '8px';
+    el.style.zIndex = '999';
+    el.style.pointerEvents = 'none';
+    el.textContent = 'FPS --';
+    document.body.appendChild(el);
+    return el;
+})();
 
 // ========== THIRD-PERSON CAMERA (OVER-SHOULDER FOLLOW) ==========
 const CAMERA_VERTICAL_OFFSET = 5.2;   // Slightly higher for full-shot framing
@@ -1322,6 +1341,7 @@ const MOVEMENT_IDLE_TIMEOUT = 0.35; // seconds
 let adaptiveQuality = 'low';
 let fpsAverage = 60;
 let adaptiveTimer = 0;
+let lastFrameStamp = performance.now();
 
 function updateKeyMovementDirection() {
     if (activeMovementKeys.has('ArrowRight')) {
@@ -2201,8 +2221,12 @@ function updateFloatingArtifactCollection(collection, dt) {
 
 function animate() {
     requestAnimationFrame(animate);
+    const currentStamp = performance.now();
     const dt = clock.getDelta();
     totalTime += dt;
+    const instantaneousFPS = 1 / Math.max(dt, 0.0001);
+    fpsAverage = THREE.MathUtils.lerp(fpsAverage, instantaneousFPS, 0.1);
+    fpsOverlay.textContent = `${fpsAverage.toFixed(0)} fps`;
     sparseParticleFrame = (sparseParticleFrame + 1) % PARTICLE_UPDATE_INTERVAL;
     const shouldUpdateSparseParticles = sparseParticleFrame === 0;
     forestGlowUniforms.time.value = totalTime;
