@@ -27,7 +27,7 @@ const IS_LOW_POWER_DEVICE = (() => {
     }
     return false;
 })();
-const DEVICE_PIXEL_RATIO_LIMIT = IS_LOW_POWER_DEVICE ? 1.0 : 1.2;
+const DEVICE_PIXEL_RATIO_LIMIT = IS_LOW_POWER_DEVICE ? 0.75 : 0.95;
 const PARTICLE_COUNT_SCALE = IS_LOW_POWER_DEVICE ? 0.4 : 0.8;
 const DECOR_COUNT_SCALE = IS_LOW_POWER_DEVICE ? 0.4 : 0.75;
 const FOREST_DENSITY_SCALE = IS_LOW_POWER_DEVICE ? 0.35 : 0.55;
@@ -177,7 +177,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, DEVICE_PIXEL_RATIO_LIMIT));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-// Enable shadows
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.setClearColor('#05000c', 1);
@@ -1320,6 +1319,9 @@ let isMovementActive = false;
 let idleTimer = 0;
 const MOVEMENT_IDLE_THRESHOLD = 0.04;
 const MOVEMENT_IDLE_TIMEOUT = 0.35; // seconds
+let adaptiveQuality = 'low';
+let fpsAverage = 60;
+let adaptiveTimer = 0;
 
 function updateKeyMovementDirection() {
     if (activeMovementKeys.has('ArrowRight')) {
