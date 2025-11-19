@@ -37,6 +37,7 @@ const PARTICLE_UPDATE_INTERVAL = IS_LOW_POWER_DEVICE ? 3 : 2;
 const CRYSTAL_DRIFT_COUNT = IS_LOW_POWER_DEVICE ? 3 : 6;
 const MAGIC_CLUSTER_COUNT = IS_LOW_POWER_DEVICE ? 4 : 8;
 const SEASON_ANGLES = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]; // 0°, 90°, 180°, 270°
+const ALLOW_SEASON_FX = !IS_LOW_POWER_DEVICE;
 
 // Character movement controls
 const CHARACTER_BASE_ROTATION_SPEED = 0.8; // radians per second
@@ -65,6 +66,7 @@ const canvasFreezeCover = (() => {
     document.body.appendChild(el);
     return el;
 })();
+const loadingBarFill = document.getElementById('loading-bar-fill');
 const lorePanel = document.getElementById('lore-panel');
 const lorePanelTitle = document.getElementById('lore-panel-title');
 const lorePanelBody = document.getElementById('lore-panel-body');
@@ -73,33 +75,25 @@ const hotspotButtons = Array.from(document.querySelectorAll('.hotspot-btn'));
 if (loadingOverlay) {
     document.body.classList.add('is-loading');
 }
-const LOADING_MESSAGES = [
-    'Brewing the magic...',
-    'Forging aurora circuits...',
-    'Polishing portal lenses...',
-    'Tuning orbital relays...'
-];
-let loadingMessageIndex = 0;
-let loadingMessageInterval = null;
-
-function startLoadingMessages() {
-    if (!loadingText) return;
-    loadingText.textContent = LOADING_MESSAGES[0];
-    loadingMessageInterval = window.setInterval(() => {
-        loadingMessageIndex = (loadingMessageIndex + 1) % LOADING_MESSAGES.length;
-        loadingText.textContent = LOADING_MESSAGES[loadingMessageIndex];
-    }, 2600);
+if (loadingText) {
+    loadingText.textContent = 'Preparing...';
 }
 
-function stopLoadingMessages() {
-    if (loadingMessageInterval) {
-        clearInterval(loadingMessageInterval);
-        loadingMessageInterval = null;
+function updateLoadingVisual(percent) {
+    if (loadingProgress) {
+        loadingProgress.textContent = `Loading ${percent}%`;
+    }
+    if (loadingBarFill) {
+        loadingBarFill.style.width = `${percent}%`;
     }
 }
 
-if (loadingText) {
-    startLoadingMessages();
+const auroraRoot = document.querySelector('.aurora');
+if (auroraRoot && auroraRoot.parentElement) {
+    auroraRoot.parentElement.removeChild(auroraRoot);
+    if (loadingOverlay) {
+        loadingOverlay.style.background = '#05000c';
+    }
 }
 
 const loadingManager = new THREE.LoadingManager();
@@ -107,7 +101,6 @@ let overlayDismissed = false;
 function dismissLoadingOverlay(message) {
     if (overlayDismissed) return;
     overlayDismissed = true;
-    stopLoadingMessages();
     if (message && loadingProgress) {
         loadingProgress.textContent = message;
     }
@@ -123,15 +116,13 @@ function dismissLoadingOverlay(message) {
 }
 
 loadingManager.onStart = () => {
-    if (loadingProgress) {
-        loadingProgress.textContent = 'Loading 0%';
-    }
+    updateLoadingVisual(0);
 };
 
 loadingManager.onProgress = (_url, itemsLoaded, itemsTotal) => {
-    if (!loadingProgress || !itemsTotal) return;
+    if (!itemsTotal) return;
     const percent = Math.round((itemsLoaded / itemsTotal) * 100);
-    loadingProgress.textContent = `Loading ${percent}%`;
+    updateLoadingVisual(percent);
 };
 
 function compileView() {
@@ -142,33 +133,8 @@ function compileView() {
     return Promise.resolve();
 }
 
-async function finalizeLoading() {
-    const originalPosition = camera.position.clone();
-    const originalQuaternion = camera.quaternion.clone();
-    const originalUp = camera.up.clone();
-
-    const angles = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2];
-    const previewDistance = WALKWAY_RADIUS + 14;
-    for (const angle of angles) {
-        camera.position.set(
-            Math.cos(angle) * previewDistance,
-            7,
-            Math.sin(angle) * previewDistance
-        );
-        camera.lookAt(0, 0, 0);
-        await compileView();
-    }
-
-    camera.position.copy(originalPosition);
-    camera.quaternion.copy(originalQuaternion);
-    camera.up.copy(originalUp);
-    return compileView();
-}
-
 loadingManager.onLoad = () => {
-    finalizeLoading()
-        .catch((err) => console.warn('Renderer compile failed', err))
-        .finally(() => dismissLoadingOverlay('Loading complete'));
+    dismissLoadingOverlay('Loading complete');
 };
 
 loadingManager.onError = (url) => {
@@ -1037,14 +1003,19 @@ function placeVoyager() {
     });
 }
 
-createGlobalAtmosphereParticles();
+if (!IS_LOW_POWER_DEVICE) {
+    createGlobalAtmosphereParticles();
+    createFloatingElements();
+    createAuroraBands();
+}
 createGlobalPixelParticles();
 placeForestShrine();
 placeMagicGate();
 placeVoyager();
-createAuroraBands();
-placeCrystalDrifts();
-placeMagicCrystalClusters();
+if (!IS_LOW_POWER_DEVICE) {
+    placeCrystalDrifts();
+    placeMagicCrystalClusters();
+}
 const FOREST_RING_SETUPS = {
     inner: {
         radius: EFFECT_INNER_RADIUS + 0.45,
@@ -2332,65 +2303,63 @@ function animate() {
     updateCamera(dt);
     
     // Update fireflies (summer)
-    const fireflies = seasonGroups.summer.userData.fireflies;
-    if (!isMovementActive && fireflies) {
-        const positions = fireflies.points.geometry.attributes.position.array;
-        fireflies.velocities.forEach((vel, i) => {
-            positions[i * 3 + 1] += Math.sin(totalTime * vel.speed + vel.phase) * 0.01;
-            if (positions[i * 3 + 1] > 5) positions[i * 3 + 1] = 0;
-        });
-        fireflies.points.geometry.attributes.position.needsUpdate = true;
-    }
-    
-    // Update rain (rain section)
-    const rain = seasonGroups.rain.userData.rain;
-    if (!isMovementActive && shouldUpdateSparseParticles && rain) {
-        const positions = rain.geometry.attributes.position.array;
-        rain.velocities.forEach((vel, i) => {
-            positions[i * 3 + 1] -= vel * dt;
-            if (positions[i * 3 + 1] < -2) {
-                positions[i * 3 + 1] = 5 + Math.random() * 5;
-            }
-        });
-        rain.geometry.attributes.position.needsUpdate = true;
-    }
-    
-    // Lightning flashes
-    const lightning = seasonGroups.rain.userData.lightning;
-    if (lightning) {
-        if (Math.random() < 0.01) {
-            lightning.intensity = 2;
-        } else {
-            lightning.intensity = Math.max(0, lightning.intensity - dt * 5);
+    if (ALLOW_SEASON_FX) {
+        const fireflies = seasonGroups.summer.userData.fireflies;
+        if (!isMovementActive && fireflies) {
+            const positions = fireflies.points.geometry.attributes.position.array;
+            fireflies.velocities.forEach((vel, i) => {
+                positions[i * 3 + 1] += Math.sin(totalTime * vel.speed + vel.phase) * 0.01;
+                if (positions[i * 3 + 1] > 5) positions[i * 3 + 1] = 0;
+            });
+            fireflies.points.geometry.attributes.position.needsUpdate = true;
         }
-    }
-    
-    // Update falling leaves (autumn)
-    const leaves = seasonGroups.autumn.userData.leaves;
-    if (!isMovementActive && shouldUpdateSparseParticles && leaves) {
-        const positions = leaves.points.geometry.attributes.position.array;
-        leaves.velocities.forEach((vel, i) => {
-            positions[i * 3 + 1] -= vel.fallSpeed * dt;
-            positions[i * 3] += Math.sin(totalTime + vel.phase) * vel.drift * dt;
-            if (positions[i * 3 + 1] < -2) {
-                positions[i * 3 + 1] = 5 + Math.random() * 5;
+        
+        const rain = seasonGroups.rain.userData.rain;
+        if (!isMovementActive && shouldUpdateSparseParticles && rain) {
+            const positions = rain.geometry.attributes.position.array;
+            rain.velocities.forEach((vel, i) => {
+                positions[i * 3 + 1] -= vel * dt;
+                if (positions[i * 3 + 1] < -2) {
+                    positions[i * 3 + 1] = 5 + Math.random() * 5;
+                }
+            });
+            rain.geometry.attributes.position.needsUpdate = true;
+        }
+        
+        const lightning = seasonGroups.rain.userData.lightning;
+        if (lightning) {
+            if (Math.random() < 0.01) {
+                lightning.intensity = 2;
+            } else {
+                lightning.intensity = Math.max(0, lightning.intensity - dt * 5);
             }
-        });
-        leaves.points.geometry.attributes.position.needsUpdate = true;
-    }
-    
-    // Update snow (winter)
-    const snow = seasonGroups.winter.userData.snow;
-    if (!isMovementActive && shouldUpdateSparseParticles && snow) {
-        const positions = snow.points.geometry.attributes.position.array;
-        snow.velocities.forEach((vel, i) => {
-            positions[i * 3 + 1] -= vel.fallSpeed * dt;
-            positions[i * 3] += Math.sin(totalTime + vel.phase) * vel.drift * dt;
-            if (positions[i * 3 + 1] < -2) {
-                positions[i * 3 + 1] = 8 + Math.random() * 2;
-            }
-        });
-        snow.points.geometry.attributes.position.needsUpdate = true;
+        }
+        
+        const leaves = seasonGroups.autumn.userData.leaves;
+        if (!isMovementActive && shouldUpdateSparseParticles && leaves) {
+            const positions = leaves.points.geometry.attributes.position.array;
+            leaves.velocities.forEach((vel, i) => {
+                positions[i * 3 + 1] -= vel.fallSpeed * dt;
+                positions[i * 3] += Math.sin(totalTime + vel.phase) * vel.drift * dt;
+                if (positions[i * 3 + 1] < -2) {
+                    positions[i * 3 + 1] = 5 + Math.random() * 5;
+                }
+            });
+            leaves.points.geometry.attributes.position.needsUpdate = true;
+        }
+        
+        const snow = seasonGroups.winter.userData.snow;
+        if (!isMovementActive && shouldUpdateSparseParticles && snow) {
+            const positions = snow.points.geometry.attributes.position.array;
+            snow.velocities.forEach((vel, i) => {
+                positions[i * 3 + 1] -= vel.fallSpeed * dt;
+                positions[i * 3] += Math.sin(totalTime + vel.phase) * vel.drift * dt;
+                if (positions[i * 3 + 1] < -2) {
+                    positions[i * 3 + 1] = 8 + Math.random() * 2;
+                }
+            });
+            snow.points.geometry.attributes.position.needsUpdate = true;
+        }
     }
     
     // Parallax background rotation + animated skybox
