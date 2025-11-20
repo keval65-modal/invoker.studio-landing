@@ -7,9 +7,10 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 // ========== CONFIGURATION ==========
-const DEV_DEBUG_VISUALS = false;
+const DEV_DEBUG_VISUALS = true;
 const ENABLE_SEASON_PLACEHOLDERS = false;
 const ENABLE_BLOOM = false;
+const ENABLE_AURORA_BANDS = false;
 const GLOBE_RADIUS = 10; // doubled for larger world
 const TORUS_MAJOR_RADIUS = GLOBE_RADIUS + 0.3;
 const TORUS_MINOR_RADIUS = 0.08;
@@ -17,6 +18,7 @@ const CHARACTER_SIZE = 0.3;
 const CHARACTER_RING_CLEARANCE = 0.15;
 const HOTSPOT_COUNT = 4;
 const SEASONS = ['summer', 'rain', 'autumn', 'winter'];
+const FORCE_LOW_QUALITY = true;
 const IS_LOW_POWER_DEVICE = (() => {
     if (typeof navigator !== 'undefined') {
         if (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) return true;
@@ -54,6 +56,8 @@ canvas.style.backgroundColor = '#05000c';
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText = document.getElementById('loading-text');
 const loadingProgress = document.getElementById('loading-progress');
+const loadingPreviewCanvas = null;
+let loadingPreview = null;
 const canvasFreezeCover = (() => {
     const el = document.createElement('canvas');
     el.id = 'canvas-freeze-cover';
@@ -88,14 +92,6 @@ function updateLoadingVisual(percent) {
     }
 }
 
-const auroraRoot = document.querySelector('.aurora');
-if (auroraRoot && auroraRoot.parentElement) {
-    auroraRoot.parentElement.removeChild(auroraRoot);
-    if (loadingOverlay) {
-        loadingOverlay.style.background = '#05000c';
-    }
-}
-
 const loadingManager = new THREE.LoadingManager();
 let overlayDismissed = false;
 function dismissLoadingOverlay(message) {
@@ -105,6 +101,7 @@ function dismissLoadingOverlay(message) {
         loadingProgress.textContent = message;
     }
     document.body.classList.remove('is-loading');
+    stopLoadingPreview();
     if (loadingOverlay) {
         loadingOverlay.classList.add('is-hidden');
         setTimeout(() => {
@@ -157,6 +154,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, DEVICE_PIXEL_RATIO_LIMIT));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.setClearColor('#05000c', 1);
@@ -186,13 +184,47 @@ function resumeRenderer() {
 if (typeof window !== 'undefined') {
     window.renderer = renderer;
 }
+const CARTOON_LEVELS = 9.0;
+const CARTOON_BLEND = 0.45;
+const CartoonShader = {
+    uniforms: {
+        tDiffuse: { value: null },
+        levels: { value: CARTOON_LEVELS },
+        blend: { value: CARTOON_BLEND }
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        varying vec2 vUv;
+        uniform sampler2D tDiffuse;
+        uniform float levels;
+        uniform float blend;
+        void main() {
+            vec4 color = texture2D(tDiffuse, vUv);
+            vec3 quantized = floor(color.rgb * levels) / levels;
+            color.rgb = mix(color.rgb, quantized, clamp(blend, 0.0, 1.0));
+            gl_FragColor = color;
+        }
+    `
+};
+
 const cartoonComposer = new EffectComposer(renderer);
 const baseRenderPass = new RenderPass(scene, camera);
 const cartoonPass = new ShaderPass(CartoonShader);
-cartoonPass.uniforms.levels.value = 6.0;
+cartoonPass.uniforms.levels.value = CARTOON_LEVELS;
+cartoonPass.uniforms.blend.value = CARTOON_BLEND;
 cartoonComposer.addPass(baseRenderPass);
 cartoonComposer.addPass(cartoonPass);
 cartoonComposer.setSize(window.innerWidth, window.innerHeight);
+let adaptiveQuality = 'low';
+let fpsAverage = 60;
+let adaptiveTimer = 0;
+let lastFrameStamp = performance.now();
 function applyQualitySettings(mode) {
     adaptiveQuality = mode;
     adaptiveTimer = 0;
@@ -227,7 +259,7 @@ const fpsOverlay = document.getElementById('fps-overlay') || (() => {
 // ========== THIRD-PERSON CAMERA (OVER-SHOULDER FOLLOW) ==========
 const CAMERA_VERTICAL_OFFSET = 5.2;   // Slightly higher for full-shot framing
 const CAMERA_LOOK_AT_OFFSET = 1.0;    // Height offset for look target
-const CAMERA_TRAIL_DISTANCE = 8.2;    // Distance behind character along path tangent
+const CAMERA_TRAIL_DISTANCE = 8.2 * 1.15;    // Distance behind character along path tangent (pulled back ~15%)
 const CAMERA_OUTWARD_OFFSET = 2.4;    // Push camera away from ring for depth
 const CAMERA_POSITION_SMOOTH = 0.08;
 const CAMERA_LOOK_SMOOTH = 0.12;
@@ -300,8 +332,15 @@ const WALKWAY_RADIUS = GLOBE_RADIUS + 5.5; // pushed further for more breathing 
 const RING_INNER_RADIUS = WALKWAY_RADIUS - 1.6;
 const RING_OUTER_RADIUS = WALKWAY_RADIUS + 1.8;
 const WALKWAY_WIDTH = 1.6;
+const INNER_RING_WIDTH = 1.0;
 const EFFECT_INNER_RADIUS = RING_INNER_RADIUS - 1.5;
+const EFFECT_INNER_WIDTH = 1.4;
 const EFFECT_OUTER_RADIUS = RING_OUTER_RADIUS + 1.6;
+const BUILDING_SURFACE_PADDING = 0.02;
+const STAR_BUILDING_SCALE_MULTIPLIER = 2.25;
+const STAR_PLACEMENT_SURFACES = [];
+
+const getPlacementSurface = () => STAR_PLACEMENT_SURFACES[0];
 let currentDayNightFactor = 0.5;
 
 function createRingMesh(innerRadius, width, color, emissiveColor, emissiveIntensity, height) {
@@ -323,13 +362,22 @@ function createRingMesh(innerRadius, width, color, emissiveColor, emissiveIntens
     return mesh;
 }
 
-const innerRing = createRingMesh(RING_INNER_RADIUS, 1.0, 0x00ffe5, 0x00c6b0, 0.45, 0.3);          // teal
+const innerRing = createRingMesh(RING_INNER_RADIUS, INNER_RING_WIDTH, 0x00ffe5, 0x00c6b0, 0.45, 0.3);          // teal
 const walkwayRing = createRingMesh(WALKWAY_RADIUS, WALKWAY_WIDTH, 0xff45ff, 0xb40fb4, 0.5, 0.4);   // magenta
 const outerRing = createRingMesh(RING_OUTER_RADIUS, 1.2, 0x77a7ff, 0x4263ff, 0.35, 0.5);          // blue
 
 scene.add(innerRing);
 scene.add(walkwayRing);
 scene.add(outerRing);
+
+STAR_PLACEMENT_SURFACES.push({
+    id: 'inner',
+    inner: GLOBE_RADIUS - 0.02,
+    outer: EFFECT_INNER_RADIUS - 0.08,
+    color: 0xff8cf5,
+    mesh: null,
+    height: innerRing.position.y
+});
 
 function addRingOutline(baseRadius, width, y, color) {
     const geometry = new THREE.RingGeometry(
@@ -408,13 +456,17 @@ const outerEffectParticles = addRingParticles(
 
 let globalAtmosphereParticles = null;
 let globalPixelParticles = null;
+let equatorialPixelRing = null;
 const floatingElements = [];
 const floatingCrystalRocks = [];
 const floatingMagicClusters = [];
+const weatherSystems = [];
 const auroraBands = [];
 let auroraRing = null;
 const ambientAIs = [];
 const worldProps = [];
+const starfallSystems = [];
+const quadrantDividerLines = [];
 const forestInstances = [];
 const decorationInstances = [];
 const dancingJellyTrees = [];
@@ -467,6 +519,7 @@ const gltfCache = new Map();
 const treeAssetCache = new Map();
 const forestGlowUniforms = { time: { value: 0 } };
 const auroraUniforms = { time: { value: 0 } };
+initSolariaLoadingPreview();
 
 function ensureMaterialTextures(material) {
     if (!material) return;
@@ -483,7 +536,9 @@ function ensureMaterialTextures(material) {
 
 function loadGLTFClone(path, onReady, onError) {
     if (gltfCache.has(path)) {
-        const clone = cloneSkeleton(gltfCache.get(path));
+        const cached = gltfCache.get(path);
+        const clone = cloneSkeleton(cached.scene);
+        clone.animations = cached.animations;
         onReady(clone);
         return;
     }
@@ -497,8 +552,13 @@ function loadGLTFClone(path, onReady, onError) {
                     ensureMaterialTextures(child.material);
                 }
             });
-            gltfCache.set(path, gltf.scene);
+            const cacheEntry = {
+                scene: gltf.scene,
+                animations: (gltf.animations || []).map((clip) => clip)
+            };
+            gltfCache.set(path, cacheEntry);
             const clone = cloneSkeleton(gltf.scene);
+            clone.animations = cacheEntry.animations;
             onReady(clone);
         },
         undefined,
@@ -704,6 +764,41 @@ function createGlobalPixelParticles() {
     globalPixelParticles.userData = { basePositions, amplitudes, speeds };
     scene.add(globalPixelParticles);
 }
+function createEquatorialPixelRing() {
+    const count = Math.max(80, Math.round(260 * PARTICLE_COUNT_SCALE));
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const baseAngles = new Float32Array(count);
+    const radialOffsets = new Float32Array(count);
+    const heights = new Float32Array(count);
+    const speeds = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = WALKWAY_RADIUS + THREE.MathUtils.randFloatSpread(1.5);
+        const height = THREE.MathUtils.randFloatSpread(0.6);
+        const idx = i * 3;
+        positions[idx] = Math.cos(angle) * radius;
+        positions[idx + 1] = height;
+        positions[idx + 2] = Math.sin(angle) * radius;
+        baseAngles[i] = angle;
+        radialOffsets[i] = radius;
+        heights[i] = height;
+        speeds[i] = 0.5 + Math.random() * 1.2;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.PointsMaterial({
+        color: 0xfff8e7,
+        size: 0.08,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false
+    });
+    equatorialPixelRing = new THREE.Points(geometry, material);
+    equatorialPixelRing.userData = { baseAngles, radialOffsets, heights, speeds };
+    scene.add(equatorialPixelRing);
+}
 function createGlobalAtmosphereParticles() {
     const count = Math.max(80, Math.round(180 * PARTICLE_COUNT_SCALE));
     const geometry = new THREE.BufferGeometry();
@@ -823,6 +918,87 @@ function scaleSceneToSize(scene, desiredSize) {
     const maxDimension = Math.max(size.x, size.y, size.z, 0.0001);
     const scale = desiredSize / maxDimension;
     scene.scale.setScalar(scale);
+}
+
+function stopLoadingPreview() {
+    if (!loadingPreview) return;
+    loadingPreview.running = false;
+    if (loadingPreview.cleanup) {
+        loadingPreview.cleanup();
+    }
+    if (loadingPreview.renderer) {
+        loadingPreview.renderer.dispose();
+    }
+    loadingPreview = null;
+}
+
+function initSolariaLoadingPreview() {
+    if (!loadingPreviewCanvas) return;
+    const previewRenderer = new THREE.WebGLRenderer({
+        canvas: loadingPreviewCanvas,
+        antialias: true,
+        alpha: true
+    });
+    previewRenderer.outputColorSpace = THREE.SRGBColorSpace;
+    previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    previewRenderer.setClearColor(0x000000, 0);
+
+    const previewScene = new THREE.Scene();
+    const previewCamera = new THREE.PerspectiveCamera(32, 1, 0.1, 20);
+    previewCamera.position.set(0, 0.4, 3.6);
+    const ambient = new THREE.AmbientLight(0x8fb7ff, 0.8);
+    const dir = new THREE.DirectionalLight(0xffffff, 1.15);
+    dir.position.set(2, 3, 2);
+    previewScene.add(ambient, dir);
+
+    const state = {
+        renderer: previewRenderer,
+        scene: previewScene,
+        camera: previewCamera,
+        mixer: null,
+        clock: new THREE.Clock(),
+        running: true,
+        cleanup: null,
+        model: null
+    };
+
+    const handleResize = () => {
+        const rect = loadingPreviewCanvas.getBoundingClientRect();
+        const width = Math.max(rect.width || loadingPreviewCanvas.clientWidth || 320, 200);
+        const height = Math.max(rect.height || loadingPreviewCanvas.clientHeight || 320, 200);
+        previewRenderer.setSize(width, height, false);
+        previewCamera.aspect = width / height;
+        previewCamera.updateProjectionMatrix();
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    state.cleanup = () => window.removeEventListener('resize', handleResize);
+
+    loadGLTFClone('/assets/solaria_core.glb', (model) => {
+        scaleSceneToSize(model, 1.8);
+        model.position.set(0, 0, 0);
+        previewScene.add(model);
+        state.model = model;
+        if (model.animations && model.animations.length) {
+            state.mixer = new THREE.AnimationMixer(model);
+            model.animations.forEach((clip) => {
+                state.mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
+            });
+        }
+    }, (err) => console.warn('Failed to load solaria_core.glb for preview', err));
+
+    const animatePreview = () => {
+        if (!state.running) return;
+        requestAnimationFrame(animatePreview);
+        const delta = state.clock.getDelta();
+        if (state.mixer) state.mixer.update(delta);
+        if (state.model) {
+            state.model.rotation.y += delta * 0.15;
+        }
+        previewRenderer.render(previewScene, previewCamera);
+    };
+    animatePreview();
+    loadingPreview = state;
 }
 
 function spawnFloatingArtifacts({
@@ -1003,15 +1179,53 @@ function placeVoyager() {
     });
 }
 
+function placeSolariaCore() {
+    const angle = -Math.PI * 0.2;
+    const distance = EFFECT_OUTER_RADIUS + 4.6;
+    const baseHeight = effectOuterRing.position.y + 0.75;
+    const hoverSpeed = 0.65;
+    const hoverAmplitude = 0.4;
+    loadGLTFClone('/assets/solaria_core.glb', (model) => {
+        scaleSceneToSize(model, 1.9);
+        model.position.set(
+            Math.cos(angle) * distance,
+            baseHeight,
+            Math.sin(angle) * distance
+        );
+        model.lookAt(0, baseHeight, 0);
+        scene.add(model);
+        const entry = {
+            object: model,
+            angle,
+            baseHeight,
+            hoverSpeed,
+            hoverAmplitude,
+            phase: Math.random() * Math.PI * 2,
+            mixer: null
+        };
+        if (model.animations && model.animations.length) {
+            entry.mixer = new THREE.AnimationMixer(model);
+            model.animations.forEach((clip) => {
+                entry.mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
+            });
+        }
+        worldProps.push(entry);
+    }, (err) => console.warn('Failed to place solaria_core.glb', err));
+}
+
 if (!IS_LOW_POWER_DEVICE) {
     createGlobalAtmosphereParticles();
     createFloatingElements();
-    createAuroraBands();
+    if (ENABLE_AURORA_BANDS) {
+        createAuroraBands();
+    }
 }
 createGlobalPixelParticles();
+createEquatorialPixelRing();
 placeForestShrine();
 placeMagicGate();
 placeVoyager();
+placeSolariaCore();
 if (!IS_LOW_POWER_DEVICE) {
     placeCrystalDrifts();
     placeMagicCrystalClusters();
@@ -1368,34 +1582,6 @@ let gestureFreezeSnapshot = null;
 let isGestureFrozen = false;
 const MOVEMENT_IDLE_THRESHOLD = 0.04;
 const MOVEMENT_IDLE_TIMEOUT = 0.35; // seconds
-let adaptiveQuality = 'low';
-let fpsAverage = 60;
-let adaptiveTimer = 0;
-let lastFrameStamp = performance.now();
-const CartoonShader = {
-    uniforms: {
-        tDiffuse: { value: null },
-        levels: { value: 6.0 }
-    },
-    vertexShader: `
-        varying vec2 vUv;
-        void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        varying vec2 vUv;
-        uniform sampler2D tDiffuse;
-        uniform float levels;
-        void main() {
-            vec4 color = texture2D(tDiffuse, vUv);
-            color.rgb = floor(color.rgb * levels) / levels;
-            gl_FragColor = color;
-        }
-    `
-};
-
 function updateKeyMovementDirection() {
     if (activeMovementKeys.has('ArrowRight')) {
         keyMovementDirection = -1; // clockwise
@@ -1631,12 +1817,6 @@ Object.keys(zoneLights).forEach((season, index) => {
     light.castShadow = true;
     scene.add(light);
     scene.add(zoneLights[season].ambient);
-    
-    // Initially hide all lights except summer
-    if (index !== 0) {
-        light.visible = false;
-        zoneLights[season].ambient.visible = false;
-    }
 });
 
 const seasonalFogColors = {
@@ -1646,24 +1826,168 @@ const seasonalFogColors = {
     winter: new THREE.Color('#4f3a9e')
 };
 
-function setSeasonFog(seasonIndex) {
-    const season = SEASONS[seasonIndex];
-    Object.keys(zoneLights).forEach((s, i) => {
-        const isActive = (i === seasonIndex);
-        zoneLights[s].ambient.visible = isActive;
-        zoneLights[s].directional.visible = isActive;
-    });
-    const color = seasonalFogColors[season] || globalFogColor;
+const SEASON_TRANSITION_DURATION = 2.2;
+let currentSeason = 0;
+let targetSeason = 0;
+const seasonWeights = [1, 0, 0, 0];
+const seasonWeightTargets = [1, 0, 0, 0];
+const seasonLabelElement = document.getElementById('season');
+
+function storeBaseLightIntensity(light) {
+    if (!light.userData) {
+        light.userData = {};
+    }
+    if (light.userData.baseIntensity === undefined) {
+        light.userData.baseIntensity = light.intensity;
+    }
+}
+
+function applyLightWeight(lights, weight) {
+    const ambient = lights.ambient;
+    const directional = lights.directional;
+    storeBaseLightIntensity(ambient);
+    storeBaseLightIntensity(directional);
+    const visible = weight > 0.02;
+    ambient.visible = visible;
+    directional.visible = visible;
+    ambient.intensity = ambient.userData.baseIntensity * weight;
+    directional.intensity = directional.userData.baseIntensity * weight;
+}
+
+function initializeSeasonEnvironment(initialSeason = 0) {
+    currentSeason = initialSeason;
+    targetSeason = initialSeason;
+    seasonWeights.fill(0);
+    seasonWeightTargets.fill(0);
+    seasonWeights[initialSeason] = 1;
+    seasonWeightTargets[initialSeason] = 1;
+    const color = seasonalFogColors[SEASONS[initialSeason]] || globalFogColor;
     if (!scene.fog) {
         scene.fog = new THREE.FogExp2(color.clone(), 0.02);
     }
     scene.fog.color.copy(color);
+    Object.keys(zoneLights).forEach((seasonKey, index) => {
+        const lights = zoneLights[seasonKey];
+        applyLightWeight(lights, index === initialSeason ? 1 : 0);
+    });
+    Object.keys(seasonGroups).forEach((key, index) => {
+        const group = seasonGroups[key];
+        group.userData.fade = index === initialSeason ? 1 : 0;
+        group.visible = index === initialSeason;
+    });
+    if (seasonLabelElement) {
+        const label = SEASONS[initialSeason];
+        seasonLabelElement.textContent = label.charAt(0).toUpperCase() + label.slice(1);
+    }
 }
 
-setSeasonFog(0);
+function requestSeasonChange(nextSeason) {
+    if (nextSeason === targetSeason && seasonWeightTargets[nextSeason] === 1) return;
+    targetSeason = nextSeason;
+    seasonWeightTargets.fill(0);
+    seasonWeightTargets[nextSeason] = 1;
+}
+
+function blendSeasonFogColors() {
+    if (!scene.fog) return;
+    const blended = new THREE.Color(0, 0, 0);
+    seasonWeights.forEach((weight, index) => {
+        if (weight <= 0) return;
+        const color = seasonalFogColors[SEASONS[index]] || globalFogColor;
+        blended.r += color.r * weight;
+        blended.g += color.g * weight;
+        blended.b += color.b * weight;
+    });
+    scene.fog.color.copy(blended);
+}
+
+function updateSeasonLightsFromWeights() {
+    Object.keys(zoneLights).forEach((seasonKey, index) => {
+        applyLightWeight(zoneLights[seasonKey], seasonWeights[index]);
+    });
+}
+
+function prepareFadeNodes(group) {
+    if (group.userData.fadeNodesPrepared) return;
+    const nodes = [];
+    group.traverse((child) => {
+        if (child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((mat) => {
+                if (!mat.userData) mat.userData = {};
+                if (mat.userData.baseOpacity === undefined) {
+                    mat.userData.baseOpacity = mat.opacity !== undefined ? mat.opacity : 1;
+                }
+                mat.transparent = true;
+                mat.depthWrite = false;
+            });
+        }
+        if (child.intensity !== undefined) {
+            if (!child.userData) child.userData = {};
+            if (child.userData.baseIntensity === undefined) {
+                child.userData.baseIntensity = child.intensity;
+            }
+        }
+        nodes.push(child);
+    });
+    group.userData.fadeNodes = nodes;
+    group.userData.fadeNodesPrepared = true;
+}
+
+function applyGroupFade(group, targetWeight) {
+    const currentFade = group.userData.fade ?? 0;
+    const nextFade = THREE.MathUtils.lerp(currentFade, targetWeight, 0.15);
+    group.userData.fade = nextFade;
+    prepareFadeNodes(group);
+    const visible = nextFade > 0.01;
+    group.visible = visible;
+    const nodes = group.userData.fadeNodes || [];
+    nodes.forEach((node) => {
+        if (node.material) {
+            const materials = Array.isArray(node.material) ? node.material : [node.material];
+            materials.forEach((mat) => {
+                const base = mat.userData?.baseOpacity ?? 1;
+                mat.opacity = base * nextFade;
+            });
+        }
+        if (node.intensity !== undefined) {
+            const base = node.userData?.baseIntensity ?? node.intensity;
+            node.intensity = base * nextFade;
+        }
+    });
+}
+
+function fadeSeasonGroupsFromWeights() {
+    Object.keys(seasonGroups).forEach((key, index) => {
+        applyGroupFade(seasonGroups[key], seasonWeights[index]);
+    });
+}
+
+function updateSeasonSystems(dt) {
+    const step = dt / SEASON_TRANSITION_DURATION;
+    for (let i = 0; i < seasonWeights.length; i++) {
+        const target = seasonWeightTargets[i];
+        const current = seasonWeights[i];
+        if (Math.abs(target - current) < 1e-4) {
+            seasonWeights[i] = target;
+            continue;
+        }
+        const delta = Math.sign(target - current) * Math.min(Math.abs(target - current), step);
+        seasonWeights[i] = THREE.MathUtils.clamp(current + delta, 0, 1);
+    }
+    blendSeasonFogColors();
+    updateSeasonLightsFromWeights();
+    fadeSeasonGroupsFromWeights();
+    if (seasonWeights[targetSeason] > 0.98 && currentSeason !== targetSeason) {
+        currentSeason = targetSeason;
+        if (seasonLabelElement) {
+            const label = SEASONS[currentSeason];
+            seasonLabelElement.textContent = label.charAt(0).toUpperCase() + label.slice(1);
+        }
+    }
+}
 
 // ========== SEASONAL EFFECTS ==========
-let currentSeason = 0;
 const seasonGroups = {
     summer: new THREE.Group(),
     rain: new THREE.Group(),
@@ -1673,6 +1997,387 @@ const seasonGroups = {
 
 // Add season groups to scene
 Object.values(seasonGroups).forEach(group => scene.add(group));
+initializeSeasonEnvironment(0);
+
+const QUADRANT_DEFS = [
+    { id: 'modern', label: 'Modern Nexus', seasonIndex: 0, color: 0x7dd5ff },
+    { id: 'ancient', label: 'Ancient Ruins', seasonIndex: 1, color: 0xe0c18f },
+    { id: 'neon', label: 'Neon Bazaar', seasonIndex: 2, color: 0xf56bff },
+    { id: 'dystopian', label: 'Dystopian Frontier', seasonIndex: 3, color: 0x9ea8ff }
+];
+const QUADRANT_ANCHOR_COUNT = 6;
+const STAR_WARS_BUILDINGS = [
+    { path: '/assets/Gothic/Goth_1.glb', label: 'Goth 1', normAngle: 0.08, scaleMul: 0.6, radiusMul: 0.08 },
+    { path: '/assets/Gothic/Goth_2.glb', label: 'Goth 2', normAngle: 0.16, scaleMul: 0.58, radiusMul: 0.1 },
+    { path: '/assets/Gothic/Goth_3.glb', label: 'Goth 3', normAngle: 0.24, scaleMul: 0.62, radiusMul: 0.12 },
+    { path: '/assets/Gothic/Goth_4.glb', label: 'Goth 4', normAngle: 0.34, scaleMul: 0.55, radiusMul: 0.14 },
+    { path: '/assets/Gothic/Goth_5.glb', label: 'Goth 5', normAngle: 0.44, scaleMul: 0.6, radiusMul: 0.16 },
+    { path: '/assets/Gothic/Goth_6.glb', label: 'Goth 6', normAngle: 0.54, scaleMul: 0.58, radiusMul: 0.18 },
+    { path: '/assets/Gothic/Goth_7.glb', label: 'Goth 7', normAngle: 0.64, scaleMul: 0.6, radiusMul: 0.2 },
+    { path: '/assets/Gothic/Goth_8.glb', label: 'Goth 8', normAngle: 0.76, scaleMul: 0.62, radiusMul: 0.22 },
+    { path: '/assets/Gothic/Goth_9.glb', label: 'Goth 9', normAngle: 0.88, scaleMul: 0.6, radiusMul: 0.24 }
+];
+const quadrantGroups = {};
+initializeQuadrantZones();
+
+function initializeQuadrantZones() {
+    const firstRingInnerRadius = WALKWAY_RADIUS - WALKWAY_WIDTH * 0.5;
+    QUADRANT_DEFS.forEach((def, index) => {
+        const startAngle = SEASON_ANGLES[index];
+        const endAngle = startAngle + Math.PI / 2;
+        const group = new THREE.Group();
+        group.name = `${def.label} Zone`;
+        group.userData = {
+            id: def.id,
+            label: def.label,
+            seasonIndex: def.seasonIndex,
+            startAngle,
+            endAngle,
+            radiusInner: GLOBE_RADIUS + 0.2,
+            radiusOuter: firstRingInnerRadius
+        };
+        group.userData.anchors = createQuadrantAnchors(group.userData);
+        quadrantGroups[def.id] = group;
+        scene.add(group);
+        const helper = createQuadrantDebugArc(group.userData, def.color);
+        group.add(helper);
+    });
+    if (typeof window !== 'undefined') {
+        window.quadrantGroups = quadrantGroups;
+    }
+    populateStarWarsQuadrant();
+    initializeStarPlacementSurfaces();
+    createQuadrantDivisionLines();
+}
+
+function createPlacementSurfaceMesh(surface) {
+    const geometry = new THREE.RingGeometry(surface.inner, surface.outer, 128, 1);
+    const material = new THREE.MeshBasicMaterial({
+        color: surface.color,
+        transparent: true,
+        opacity: DEV_DEBUG_VISUALS ? 0.25 : 0.06,
+        side: THREE.DoubleSide,
+        wireframe: DEV_DEBUG_VISUALS,
+        depthWrite: false
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = Math.PI / 2;
+    mesh.position.y = innerRing.position.y + 0.015;
+    mesh.visible = DEV_DEBUG_VISUALS;
+    scene.add(mesh);
+    surface.mesh = mesh;
+}
+
+function initializeStarPlacementSurfaces() {
+    STAR_PLACEMENT_SURFACES.forEach((surface) => {
+        createPlacementSurfaceMesh(surface);
+    });
+}
+
+function createQuadrantAnchors(config) {
+    const anchors = [];
+    const elevation = innerRing.position.y + 0.05;
+    for (let i = 0; i < QUADRANT_ANCHOR_COUNT; i++) {
+        const t = QUADRANT_ANCHOR_COUNT === 1 ? 0.5 : i / (QUADRANT_ANCHOR_COUNT - 1);
+        const angle = THREE.MathUtils.lerp(config.startAngle, config.endAngle, t);
+        const innerRadius = config.radiusInner;
+        const outerRadius = config.radiusOuter;
+        const innerPosition = new THREE.Vector3(
+            Math.cos(angle) * innerRadius,
+            elevation,
+            Math.sin(angle) * innerRadius
+        );
+        const outerPosition = new THREE.Vector3(
+            Math.cos(angle) * outerRadius,
+            elevation,
+            Math.sin(angle) * outerRadius
+        );
+        anchors.push({
+            angle,
+            innerRadius,
+            outerRadius,
+            innerPosition,
+            outerPosition,
+            normal: new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle))
+        });
+    }
+    return anchors;
+}
+
+function createQuadrantDebugArc(config, color) {
+    const portions = 32;
+    const geometry = new THREE.RingGeometry(
+        config.radiusInner,
+        config.radiusOuter,
+        portions,
+        1,
+        config.startAngle,
+        Math.PI / 2
+    );
+    const material = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.08,
+        side: THREE.DoubleSide,
+        depthWrite: false
+    });
+    const arc = new THREE.Mesh(geometry, material);
+    arc.rotation.x = Math.PI / 2;
+    arc.position.y = innerRing.position.y + 0.02;
+    return arc;
+}
+
+function createQuadrantDividerLine(angle, color) {
+    const startRadius = GLOBE_RADIUS - 0.2;
+    const endRadius = WALKWAY_RADIUS + WALKWAY_WIDTH * 2.5;
+    const baseY = innerRing.position.y + 0.05;
+    const start = new THREE.Vector3(
+        Math.cos(angle) * startRadius,
+        baseY,
+        Math.sin(angle) * startRadius
+    );
+    const end = new THREE.Vector3(
+        Math.cos(angle) * endRadius,
+        baseY,
+        Math.sin(angle) * endRadius
+    );
+    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+    const material = new THREE.LineDashedMaterial({
+        color,
+        linewidth: 1,
+        dashSize: 0.6,
+        gapSize: 0.4,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false
+    });
+    const line = new THREE.Line(geometry, material);
+    line.computeLineDistances();
+    line.renderOrder = 10;
+    scene.add(line);
+    quadrantDividerLines.push(line);
+}
+
+function createQuadrantDivisionLines() {
+    const dividerColors = [0xff9f4a, 0x4ac3ff, 0xcd7dff, 0xff5a94];
+    SEASON_ANGLES.forEach((angle, index) => {
+        createQuadrantDividerLine(angle, dividerColors[index % dividerColors.length]);
+    });
+}
+
+function clearQuadrantContent(group, tag) {
+    if (!group) return;
+    group.children
+        .filter((child) => child.userData && child.userData.tag === tag)
+        .forEach((child) => {
+            group.remove(child);
+            if (child.geometry) child.geometry.dispose?.();
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach((mat) => mat.dispose?.());
+                } else {
+                    child.material.dispose?.();
+                }
+            }
+            if (tag === 'starfall') {
+                const idx = starfallSystems.indexOf(child);
+                if (idx !== -1) {
+                    starfallSystems.splice(idx, 1);
+                }
+            }
+        });
+    if (tag === 'starBuildings' && group.userData[tag]) {
+        group.userData[tag].forEach((entry) => {
+            const idx = worldProps.indexOf(entry);
+            if (idx !== -1) {
+                worldProps.splice(idx, 1);
+            }
+        });
+    }
+    group.userData[tag] = [];
+}
+
+function populateStarWarsQuadrant() {
+    const quadrant = quadrantGroups.modern;
+    if (!quadrant) return;
+    clearQuadrantContent(quadrant, 'starBuildings');
+    clearQuadrantContent(quadrant, 'starfall');
+    const config = quadrant.userData;
+    const range = config.endAngle - config.startAngle;
+    const padding = range * 0.05;
+    const usableRange = Math.max(range - padding * 2, 0.001);
+    const segmentCount = STAR_WARS_BUILDINGS.length;
+    const baseHeight = innerRing.position.y + 0.02;
+    const placementEntries = [];
+
+    STAR_WARS_BUILDINGS.forEach((entry, index) => {
+        const path = typeof entry === 'string' ? entry : entry.path;
+        const entryOffset = typeof entry === 'object' && typeof entry.offset === 'number'
+            ? entry.offset
+            : 0;
+        const normalized = typeof entry === 'object' && typeof entry.normAngle === 'number'
+            ? THREE.MathUtils.clamp(entry.normAngle, 0, 1)
+            : (index + 0.5) / Math.max(segmentCount, 1);
+        const baseAngle = config.startAngle + padding + usableRange * normalized;
+        const angle = baseAngle + entryOffset;
+        const surface = getPlacementSurface(entry);
+        const ringInnerLimit = surface.inner + BUILDING_SURFACE_PADDING;
+        const ringOuterLimit = surface.outer - BUILDING_SURFACE_PADDING;
+        const availableWidth = Math.max(ringOuterLimit - ringInnerLimit, BUILDING_SURFACE_PADDING * 2);
+        loadGLTFClone(path, (model) => {
+            model.userData.tag = 'starBuildings';
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    ensureMaterialTextures(child.material);
+                }
+            });
+
+            const rawSize = new THREE.Vector3();
+            const rawBox = new THREE.Box3().setFromObject(model);
+            rawBox.getSize(rawSize);
+            const span = Math.max(rawSize.x, rawSize.z, 0.001);
+            const entryScaleMul = typeof entry === 'object' && entry.scaleMul ? entry.scaleMul : 1;
+            const desiredScale = Math.min(availableWidth / span, 6) * STAR_BUILDING_SCALE_MULTIPLIER * entryScaleMul;
+            let scaleFactor = desiredScale;
+            model.scale.multiplyScalar(scaleFactor);
+
+            const fittedBox = new THREE.Box3();
+            const fittedSize = new THREE.Vector3();
+            let lift = baseHeight;
+            let width = span * scaleFactor;
+            let attempt = 0;
+            while (attempt < 20) {
+                fittedBox.setFromObject(model);
+                fittedBox.getSize(fittedSize);
+                width = Math.max(fittedSize.x, fittedSize.z);
+                lift = baseHeight - fittedBox.min.y;
+                if (width <= availableWidth) {
+                    break;
+                }
+                const shrinkRatio = Math.max(availableWidth / width, 0.8);
+                scaleFactor *= shrinkRatio;
+                model.scale.setScalar(scaleFactor);
+                attempt++;
+            }
+            if (width > availableWidth) {
+                const finalRatio = availableWidth / Math.max(width, 0.0001);
+                scaleFactor *= finalRatio;
+                model.scale.setScalar(scaleFactor);
+                fittedBox.setFromObject(model);
+                fittedBox.getSize(fittedSize);
+                width = Math.max(fittedSize.x, fittedSize.z);
+                lift = baseHeight - fittedBox.min.y;
+            }
+            const entryRadiusMul = typeof entry === 'object' && entry.radiusMul ? entry.radiusMul : 0.4;
+            const usableSpan = Math.max(ringOuterLimit - ringInnerLimit - width, BUILDING_SURFACE_PADDING);
+            const radiusBlend = THREE.MathUtils.clamp(entryRadiusMul, 0, 1);
+            const preferredRadius = ringInnerLimit + width * 0.5 + usableSpan * radiusBlend;
+            const radius = THREE.MathUtils.clamp(
+                preferredRadius,
+                ringInnerLimit + width * 0.5,
+                ringOuterLimit - width * 0.5
+            );
+            model.position.set(
+                Math.cos(angle) * radius,
+                lift,
+                Math.sin(angle) * radius
+            );
+            const rotationOffset = typeof entry === 'object' && entry.rotationOffset ? entry.rotationOffset : 0;
+            model.rotation.y = angle + Math.PI / 2 + rotationOffset;
+            model.lookAt(0, lift, 0);
+            quadrant.add(model);
+
+            const propEntry = {
+                object: model,
+                angle,
+                baseHeight: lift,
+                hoverSpeed: 0.2 + Math.random() * 0.25,
+                hoverAmplitude: 0.12 + Math.random() * 0.08,
+                phase: Math.random() * Math.PI * 2,
+                mixer: null
+            };
+            worldProps.push(propEntry);
+            placementEntries.push(propEntry);
+        }, (err) => console.warn(`Failed to load ${path}`, err));
+    });
+    quadrant.userData.starBuildings = placementEntries;
+    createStarfallParticles(quadrant, config);
+}
+
+function createStarfallParticles(quadrant, config) {
+    const count = 320;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count);
+    const angles = new Float32Array(count);
+    const baseHeight = innerRing.position.y + 0.4;
+    const upperHeight = innerRing.position.y + 6.5;
+    const minRadius = STAR_PLACEMENT_SURFACES[0].inner;
+    const maxRadius = STAR_PLACEMENT_SURFACES[STAR_PLACEMENT_SURFACES.length - 1].outer;
+
+    for (let i = 0; i < count; i++) {
+        const angle = THREE.MathUtils.lerp(config.startAngle, config.endAngle, Math.random());
+        const radius = THREE.MathUtils.lerp(minRadius, maxRadius, Math.random());
+        const height = baseHeight + Math.random() * (upperHeight - baseHeight);
+        const idx = i * 3;
+        positions[idx] = Math.cos(angle) * radius;
+        positions[idx + 1] = height;
+        positions[idx + 2] = Math.sin(angle) * radius;
+        velocities[i] = 0.4 + Math.random() * 0.9;
+        angles[i] = angle;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.PointsMaterial({
+        color: 0xe8f6ff,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        size: 0.05,
+        sizeAttenuation: true
+    });
+    const points = new THREE.Points(geometry, material);
+    points.userData = {
+        tag: 'starfall',
+        velocities,
+        angles,
+        lowerBound: innerRing.position.y + 0.15,
+        upperBound: upperHeight,
+        minRadius,
+        maxRadius,
+        startAngle: config.startAngle,
+        endAngle: config.endAngle
+    };
+    quadrant.add(points);
+    starfallSystems.push(points);
+}
+
+function updateStarfallSystems(dt) {
+    if (starfallSystems.length === 0) return;
+    starfallSystems.forEach((system) => {
+        const positions = system.geometry.attributes.position.array;
+        const velocities = system.userData.velocities;
+        const angles = system.userData.angles;
+        const lowerBound = system.userData.lowerBound;
+        const upperBound = system.userData.upperBound;
+        const minRadius = system.userData.minRadius;
+        const maxRadius = system.userData.maxRadius;
+        const startAngle = system.userData.startAngle;
+        const endAngle = system.userData.endAngle;
+        for (let i = 0; i < velocities.length; i++) {
+            const idx = i * 3;
+            positions[idx + 1] -= velocities[i] * dt;
+            if (positions[idx + 1] < lowerBound) {
+                positions[idx + 1] = upperBound;
+                angles[i] = THREE.MathUtils.lerp(startAngle, endAngle, Math.random());
+                const offsetRadius = THREE.MathUtils.lerp(minRadius, maxRadius, Math.random());
+                positions[idx] = Math.cos(angles[i]) * offsetRadius;
+                positions[idx + 2] = Math.sin(angles[i]) * offsetRadius;
+            }
+        }
+        system.geometry.attributes.position.needsUpdate = true;
+    });
+}
 
 // ========== DYNAMIC LIGHTING ==========
 // Ambient light for soft base illumination
@@ -2229,9 +2934,11 @@ function updateAssetVisibility() {
         artifact.mesh.visible = evaluateVisibility(artifact.mesh);
     });
 
-    auroraBands.forEach((band) => {
-        band.mesh.visible = angularDifference(band.centerAngle, focusAngle) <= FLOATING_ASSET_MAX_ANGLE;
-    });
+    if (ENABLE_AURORA_BANDS) {
+        auroraBands.forEach((band) => {
+            band.mesh.visible = angularDifference(band.centerAngle, focusAngle) <= FLOATING_ASSET_MAX_ANGLE;
+        });
+    }
 }
 
 function animateLoreMarkers(dt) {
@@ -2259,7 +2966,6 @@ const clock = new THREE.Clock();
 let sparseParticleFrame = 0;
 
 function updateFloatingArtifactCollection(collection, dt) {
-    if (isMovementActive) return;
     collection.forEach((artifact) => {
         if (!artifact.mesh.visible) {
             return;
@@ -2283,9 +2989,13 @@ function animate() {
     fpsAverage = THREE.MathUtils.lerp(fpsAverage, instantaneousFPS, 0.1);
     fpsOverlay.textContent = `${fpsAverage.toFixed(0)} fps • ${adaptiveQuality}`;
     adaptiveTimer += dt;
-    if (adaptiveQuality === 'low' && fpsAverage > 55 && adaptiveTimer > 4) {
-        applyQualitySettings('high');
-    } else if (adaptiveQuality === 'high' && fpsAverage < 42) {
+    if (!FORCE_LOW_QUALITY) {
+        if (adaptiveQuality === 'low' && fpsAverage > 55 && adaptiveTimer > 4) {
+            applyQualitySettings('high');
+        } else if (adaptiveQuality === 'high' && fpsAverage < 42) {
+            applyQualitySettings('low');
+        }
+    } else if (adaptiveQuality !== 'low') {
         applyQualitySettings('low');
     }
     sparseParticleFrame = (sparseParticleFrame + 1) % PARTICLE_UPDATE_INTERVAL;
@@ -2305,7 +3015,7 @@ function animate() {
     // Update fireflies (summer)
     if (ALLOW_SEASON_FX) {
         const fireflies = seasonGroups.summer.userData.fireflies;
-        if (!isMovementActive && fireflies) {
+        if (fireflies) {
             const positions = fireflies.points.geometry.attributes.position.array;
             fireflies.velocities.forEach((vel, i) => {
                 positions[i * 3 + 1] += Math.sin(totalTime * vel.speed + vel.phase) * 0.01;
@@ -2315,7 +3025,7 @@ function animate() {
         }
         
         const rain = seasonGroups.rain.userData.rain;
-        if (!isMovementActive && shouldUpdateSparseParticles && rain) {
+        if (shouldUpdateSparseParticles && rain) {
             const positions = rain.geometry.attributes.position.array;
             rain.velocities.forEach((vel, i) => {
                 positions[i * 3 + 1] -= vel * dt;
@@ -2336,7 +3046,7 @@ function animate() {
         }
         
         const leaves = seasonGroups.autumn.userData.leaves;
-        if (!isMovementActive && shouldUpdateSparseParticles && leaves) {
+        if (shouldUpdateSparseParticles && leaves) {
             const positions = leaves.points.geometry.attributes.position.array;
             leaves.velocities.forEach((vel, i) => {
                 positions[i * 3 + 1] -= vel.fallSpeed * dt;
@@ -2349,7 +3059,7 @@ function animate() {
         }
         
         const snow = seasonGroups.winter.userData.snow;
-        if (!isMovementActive && shouldUpdateSparseParticles && snow) {
+        if (shouldUpdateSparseParticles && snow) {
             const positions = snow.points.geometry.attributes.position.array;
             snow.velocities.forEach((vel, i) => {
                 positions[i * 3 + 1] -= vel.fallSpeed * dt;
@@ -2373,7 +3083,7 @@ function animate() {
     updateSkyboxTexture(dt, currentDayNightFactor);
     
     // Update effect ring particles
-    if (!isMovementActive && shouldUpdateSparseParticles) {
+    if (shouldUpdateSparseParticles) {
         [innerEffectParticles, outerEffectParticles].forEach((system) => {
             if (!system) return;
             const positions = system.geometry.attributes.position.array;
@@ -2389,7 +3099,7 @@ function animate() {
     }
     
     // Update weather zone particles
-    if (!isMovementActive && shouldUpdateSparseParticles) {
+    if (shouldUpdateSparseParticles) {
         weatherSystems.forEach((system) => {
             const positions = system.particles.geometry.attributes.position.array;
             const speeds = system.particles.userData.speeds;
@@ -2404,7 +3114,7 @@ function animate() {
     }
     
     // Global atmosphere drifting
-    if (!isMovementActive && shouldUpdateSparseParticles && globalAtmosphereParticles && globalAtmosphereParticles.visible) {
+    if (shouldUpdateSparseParticles && globalAtmosphereParticles && globalAtmosphereParticles.visible) {
         const positions = globalAtmosphereParticles.geometry.attributes.position.array;
         const speeds = globalAtmosphereParticles.userData.speeds;
         for (let i = 0; i < speeds.length; i++) {
@@ -2417,85 +3127,110 @@ function animate() {
         globalAtmosphereParticles.geometry.attributes.position.needsUpdate = true;
     }
     
-    if (!isMovementActive && shouldUpdateSparseParticles && globalPixelParticles) {
-        const positions = globalPixelParticles.geometry.attributes.position.array;
-        const basePositions = globalPixelParticles.userData.basePositions;
-        const amplitudes = globalPixelParticles.userData.amplitudes;
-        const speeds = globalPixelParticles.userData.speeds;
-        for (let i = 0; i < speeds.length; i++) {
-            const idx = i * 3;
-            positions[idx + 1] = basePositions[idx + 1] + Math.sin(totalTime * speeds[i] + i) * amplitudes[i];
+    if (shouldUpdateSparseParticles) {
+        if (globalPixelParticles) {
+            const positions = globalPixelParticles.geometry.attributes.position.array;
+            const basePositions = globalPixelParticles.userData.basePositions;
+            const amplitudes = globalPixelParticles.userData.amplitudes;
+            const speeds = globalPixelParticles.userData.speeds;
+            for (let i = 0; i < speeds.length; i++) {
+                const idx = i * 3;
+                positions[idx + 1] = basePositions[idx + 1] + Math.sin(totalTime * speeds[i] + i) * amplitudes[i];
+            }
+            globalPixelParticles.geometry.attributes.position.needsUpdate = true;
         }
-        globalPixelParticles.geometry.attributes.position.needsUpdate = true;
+        if (equatorialPixelRing) {
+            const positions = equatorialPixelRing.geometry.attributes.position.array;
+            const baseAngles = equatorialPixelRing.userData.baseAngles;
+            const radialOffsets = equatorialPixelRing.userData.radialOffsets;
+            const heights = equatorialPixelRing.userData.heights;
+            const speeds = equatorialPixelRing.userData.speeds;
+            for (let i = 0; i < speeds.length; i++) {
+                const idx = i * 3;
+                const angle = baseAngles[i] + totalTime * speeds[i] * 0.08;
+                const radialPulse = radialOffsets[i] + Math.sin(totalTime * speeds[i] + i) * 0.4;
+                positions[idx] = Math.cos(angle) * radialPulse;
+                positions[idx + 2] = Math.sin(angle) * radialPulse;
+                positions[idx + 1] = heights[i] + Math.sin(totalTime * speeds[i] * 0.5 + i) * 0.25;
+            }
+            equatorialPixelRing.geometry.attributes.position.needsUpdate = true;
+        }
     }
+    updateStarfallSystems(dt);
     
     // Floating sky elements
-    if (!isMovementActive) {
-        floatingElements.forEach((mesh) => {
-            if (IS_LOW_POWER_DEVICE && !mesh.visible) {
-                return;
-            }
-            const data = mesh.userData;
-            const angle = totalTime * data.speed + data.offset;
-            mesh.position.set(
-                Math.cos(angle) * data.radius,
-                data.height + Math.sin(angle * 0.5) * 0.5,
-                Math.sin(angle) * data.radius
-            );
-            mesh.rotation.y += dt * 0.3;
-            mesh.rotation.x += dt * 0.15;
-        });
+    floatingElements.forEach((mesh) => {
+        if (IS_LOW_POWER_DEVICE && !mesh.visible) {
+            return;
+        }
+        const data = mesh.userData;
+        const angle = totalTime * data.speed + data.offset;
+        mesh.position.set(
+            Math.cos(angle) * data.radius,
+            data.height + Math.sin(angle * 0.5) * 0.5,
+            Math.sin(angle) * data.radius
+        );
+        mesh.rotation.y += dt * 0.3;
+        mesh.rotation.x += dt * 0.15;
+    });
 
-        ambientAIs.forEach((ai, idx) => {
-            if (IS_LOW_POWER_DEVICE && !ai.visible) {
-                return;
-            }
-            const data = ai.userData;
-            const angle = totalTime * data.speed + data.offset;
-            ai.position.set(
-                Math.cos(angle) * data.radius,
-                data.height + Math.sin(angle * 0.7) * data.verticalSwing,
-                Math.sin(angle) * data.radius
-            );
-            ai.rotation.y = angle;
-            const pulse = 0.3 + Math.sin(angle + idx) * 0.2;
-            ai.material.emissiveIntensity = pulse;
-        });
+    ambientAIs.forEach((ai, idx) => {
+        if (IS_LOW_POWER_DEVICE && !ai.visible) {
+            return;
+        }
+        const data = ai.userData;
+        const angle = totalTime * data.speed + data.offset;
+        ai.position.set(
+            Math.cos(angle) * data.radius,
+            data.height + Math.sin(angle * 0.7) * data.verticalSwing,
+            Math.sin(angle) * data.radius
+        );
+        ai.rotation.y = angle;
+        const pulse = 0.3 + Math.sin(angle + idx) * 0.2;
+        ai.material.emissiveIntensity = pulse;
+    });
 
-        dancingJellyTrees.forEach((tree) => {
-            if (IS_LOW_POWER_DEVICE && !tree.mesh.visible) {
-                if (tree.mixer) {
-                    tree.mixer.update(0);
-                }
-                return;
-            }
-            const angle = totalTime * tree.angularSpeed + tree.offset;
-            tree.mesh.position.set(
-                Math.cos(angle) * tree.radius,
-                tree.baseHeight + Math.sin(totalTime * tree.bobSpeed + angle) * tree.bobAmount,
-                Math.sin(angle) * tree.radius
-            );
-            tree.mesh.rotation.y += dt * 0.25;
+    dancingJellyTrees.forEach((tree) => {
+        if (IS_LOW_POWER_DEVICE && !tree.mesh.visible) {
             if (tree.mixer) {
-                tree.mixer.update(dt);
+                tree.mixer.update(0);
             }
+            return;
+        }
+        const angle = totalTime * tree.angularSpeed + tree.offset;
+        tree.mesh.position.set(
+            Math.cos(angle) * tree.radius,
+            tree.baseHeight + Math.sin(totalTime * tree.bobSpeed + angle) * tree.bobAmount,
+            Math.sin(angle) * tree.radius
+        );
+        tree.mesh.rotation.y += dt * 0.25;
+        if (tree.mixer) {
+            tree.mixer.update(dt);
+        }
+    });
+
+    if (ENABLE_AURORA_BANDS) {
+        auroraBands.forEach((band) => {
+            band.mesh.position.y = band.baseHeight + Math.sin(totalTime * band.speed + band.offset) * band.wobble;
+            band.mesh.rotation.y = totalTime * 0.01;
         });
     }
-
-    auroraBands.forEach((band) => {
-        band.mesh.position.y = band.baseHeight + Math.sin(totalTime * band.speed + band.offset) * band.wobble;
-        band.mesh.rotation.y = totalTime * 0.01;
-    });
 
     updateFloatingArtifactCollection(floatingCrystalRocks, dt);
     updateFloatingArtifactCollection(floatingMagicClusters, dt);
 
     worldProps.forEach((prop) => {
         if (IS_LOW_POWER_DEVICE && !prop.object.visible) {
+            if (prop.mixer) {
+                prop.mixer.update(0);
+            }
             return;
         }
         const hoverOffset = Math.sin(totalTime * prop.hoverSpeed + prop.phase) * prop.hoverAmplitude;
         prop.object.position.y = prop.baseHeight + hoverOffset;
+        if (prop.mixer) {
+            prop.mixer.update(dt);
+        }
     });
 
     updateAssetVisibility();
@@ -2516,17 +3251,11 @@ function animate() {
         newSeason = 3; // Winter (270°-360°)
     }
     
-    if (newSeason !== currentSeason) {
-        currentSeason = newSeason;
-        setSeasonFog(currentSeason);
-        document.getElementById('season').textContent = SEASONS[currentSeason].charAt(0).toUpperCase() + SEASONS[currentSeason].slice(1);
+    if (newSeason !== targetSeason) {
+        requestSeasonChange(newSeason);
     }
     
-    // Show/hide season groups based on visibility
-    Object.keys(seasonGroups).forEach((key, i) => {
-        seasonGroups[key].visible = (i === currentSeason);
-    });
-    
+    updateSeasonSystems(dt);
     updateGlobalFog(dt);
     updateDayNightLight(totalTime);
     updatePerformanceControls();

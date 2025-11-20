@@ -17,6 +17,9 @@
             --fs: clamp(2.6rem, 7vw, 5.5rem);
             --ls: clamp(-1.75px, -0.25vw, -3.5px);
         }
+        html, body {
+            height: 100%;
+        }
         * {
             margin: 0;
             padding: 0;
@@ -29,7 +32,8 @@
             color: #fff;
         }
         body.is-loading #ui,
-        body.is-loading #hotspots {
+        body.is-loading #hotspots,
+        body.is-loading #lore-panel {
             opacity: 0;
             pointer-events: none;
         }
@@ -88,35 +92,39 @@
         #loading-overlay {
             position: fixed;
             inset: 0;
-            background: radial-gradient(circle at 20% 20%, rgba(146, 108, 255, 0.2), rgba(5, 0, 12, 0.95));
+            background-image: radial-gradient(circle farthest-corner at center, #3C4B57 0%, #1C262B 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            flex-direction: column;
+            padding: clamp(1.5rem, 6vw, 4rem);
             z-index: 1000;
             transition: opacity 0.45s ease;
-            pointer-events: all;
+            pointer-events: auto;
         }
         #loading-overlay.is-hidden {
             opacity: 0;
             pointer-events: none;
         }
         .loading-content {
-            text-align: center;
+            width: min(480px, 90vw);
             display: flex;
             flex-direction: column;
+            gap: 1.2rem;
             align-items: center;
-            gap: 16px;
-            padding: clamp(2.5rem, 6vw, 4rem);
-            max-width: 640px;
-            width: min(90vw, 700px);
-            position: relative;
+            justify-content: center;
+            text-align: center;
+        }
+        .loading-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            width: 100%;
         }
         .subtitle {
-            font-size: 1rem;
-            letter-spacing: 0.25rem;
+            font-size: 0.95rem;
+            letter-spacing: 0.35rem;
             text-transform: uppercase;
-            color: rgba(255,255,255,0.8);
+            color: rgba(255,255,255,0.7);
         }
         .title {
             font-size: var(--fs);
@@ -127,21 +135,22 @@
             margin: 0;
             text-shadow: 0 10px 45px rgba(0,0,0,0.6);
         }
-        .loading-desc {
-            font-size: 1.1rem;
-            color: rgba(255,255,255,0.8);
-            max-width: 460px;
+        .title .lights-title {
+            display: inline-block;
+            margin-top: 0.35em;
+            font-weight: 700;
+            animation: lights 5s 0.75s linear infinite;
         }
-        .loading-progress {
-            font-size: 14px;
-            color: #c8afff;
-            letter-spacing: 0.1rem;
+        .loading-desc {
+            font-size: 1.05rem;
+            color: rgba(255,255,255,0.82);
+            max-width: 480px;
         }
         #loading-text {
-            font-size: 1rem;
+            font-size: 0.95rem;
             text-transform: uppercase;
-            letter-spacing: 0.3rem;
-            color: rgba(255,255,255,0.85);
+            letter-spacing: 0.35rem;
+            color: rgba(255,255,255,0.75);
         }
         .loading-bar {
             width: 100%;
@@ -158,82 +167,112 @@
             border-radius: 999px;
             transition: width 0.3s ease;
         }
-        .aurora {
+        .loading-progress {
+            font-size: 0.85rem;
+            letter-spacing: 0.4rem;
+            color: #c8afff;
+        }
+        .loader {
+            position: relative;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            perspective: 800px;
+        }
+        .loader .inner {
             position: absolute;
-            inset: 0;
-            pointer-events: none;
-            mix-blend-mode: screen;
-            z-index: -1;
+            box-sizing: border-box;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
         }
-        .aurora__item {
-            position: absolute;
-            width: 60vw;
-            height: 60vw;
-            background-color: var(--clr-1);
-            border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%;
-            filter: blur(var(--blur));
-            mix-blend-mode: overlay;
-            opacity: 0.65;
+        .loader .inner.one {
+            left: 0;
+            top: 0;
+            animation: rotate-one 1s linear infinite;
+            border-bottom: 3px solid #EFEFFA;
         }
-        .aurora__item:nth-of-type(1) {
-            top: -50%;
-            animation: aurora-border 6s ease-in-out infinite, aurora-1 12s ease-in-out infinite alternate;
-        }
-        .aurora__item:nth-of-type(2) {
-            background-color: var(--clr-3);
+        .loader .inner.two {
             right: 0;
             top: 0;
-            animation: aurora-border 6s ease-in-out infinite, aurora-2 12s ease-in-out infinite alternate;
+            animation: rotate-two 1s linear infinite;
+            border-right: 3px solid #EFEFFA;
         }
-        .aurora__item:nth-of-type(3) {
-            background-color: var(--clr-2);
-            left: 0;
-            bottom: 0;
-            animation: aurora-border 6s ease-in-out infinite, aurora-3 8s ease-in-out infinite alternate;
-        }
-        .aurora__item:nth-of-type(4) {
-            background-color: var(--clr-4);
+        .loader .inner.three {
             right: 0;
-            bottom: -50%;
-            animation: aurora-border 6s ease-in-out infinite, aurora-4 24s ease-in-out infinite alternate;
+            bottom: 0;
+            animation: rotate-three 1s linear infinite;
+            border-top: 3px solid #EFEFFA;
         }
-        @keyframes aurora-1 {
-            0% { top: -20%; right: 0; }
-            50% { top: 80%; right: 60%; }
-            100% { top: -20%; right: 0; }
-        }
-        @keyframes aurora-2 {
-            0% { top: -40%; left: 0; }
-            60% { top: 70%; left: 65%; }
-            100% { top: -40%; left: 0; }
-        }
-        @keyframes aurora-3 {
-            0% { bottom: -10%; left: -10%; }
-            50% { bottom: 70%; left: 60%; }
-            100% { bottom: -10%; left: -10%; }
-        }
-        @keyframes aurora-4 {
-            0% { bottom: -40%; right: -10%; }
-            70% { bottom: 50%; right: 40%; }
-            100% { bottom: -40%; right: -10%; }
-        }
-        @keyframes aurora-border {
-            0% { border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%; }
-            25% { border-radius: 47% 29% 39% 49% / 61% 19% 66% 26%; }
-            50% { border-radius: 57% 23% 47% 72% / 63% 17% 66% 33%; }
-            75% { border-radius: 28% 49% 29% 100% / 93% 20% 64% 25%; }
-            100% { border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%; }
-        }
-        @media (max-width: 640px), (prefers-reduced-motion: reduce) {
-            .aurora {
-                display: none;
+        @keyframes rotate-one {
+            0% {
+                transform: rotateX(35deg) rotateY(-45deg) rotateZ(0deg);
             }
-            .loading-content {
-                padding: 2rem;
-                gap: 12px;
+            100% {
+                transform: rotateX(35deg) rotateY(-45deg) rotateZ(360deg);
             }
-            .loading-desc {
-                font-size: 0.95rem;
+        }
+        @keyframes rotate-two {
+            0% {
+                transform: rotateX(50deg) rotateY(10deg) rotateZ(0deg);
+            }
+            100% {
+                transform: rotateX(50deg) rotateY(10deg) rotateZ(360deg);
+            }
+        }
+        @keyframes rotate-three {
+            0% {
+                transform: rotateX(35deg) rotateY(55deg) rotateZ(0deg);
+            }
+            100% {
+                transform: rotateX(35deg) rotateY(55deg) rotateZ(360deg);
+            }
+        }
+        @keyframes lights {
+            0% {
+                color: hsl(230, 40%, 80%);
+                text-shadow:
+                    0 0 1em hsla(320, 100%, 50%, 0.2),
+                    0 0 0.125em hsla(320, 100%, 60%, 0.3),
+                    -1em -0.125em 0.5em hsla(40, 100%, 60%, 0),
+                    1em 0.125em 0.5em hsla(200, 100%, 60%, 0);
+            }
+            30% {
+                color: hsl(230, 80%, 90%);
+                text-shadow:
+                    0 0 1em hsla(320, 100%, 50%, 0.5),
+                    0 0 0.125em hsla(320, 100%, 60%, 0.5),
+                    -0.5em -0.125em 0.25em hsla(40, 100%, 60%, 0.2),
+                    0.5em 0.125em 0.25em hsla(200, 100%, 60%, 0.4);
+            }
+            40% {
+                color: hsl(230, 100%, 95%);
+                text-shadow:
+                    0 0 1em hsla(320, 100%, 50%, 0.5),
+                    0 0 0.125em hsla(320, 100%, 90%, 0.5),
+                    -0.25em -0.125em 0.125em hsla(40, 100%, 60%, 0.2),
+                    0.25em 0.125em 0.125em hsla(200, 100%, 60%, 0.4);
+            }
+            70% {
+                color: hsl(230, 80%, 90%);
+                text-shadow:
+                    0 0 1em hsla(320, 100%, 50%, 0.5),
+                    0 0 0.125em hsla(320, 100%, 60%, 0.5),
+                    0.5em -0.125em 0.25em hsla(40, 100%, 60%, 0.2),
+                    -0.5em 0.125em 0.25em hsla(200, 100%, 60%, 0.4);
+            }
+            100% {
+                color: hsl(230, 40%, 80%);
+                text-shadow:
+                    0 0 1em hsla(320, 100%, 50%, 0.2),
+                    0 0 0.125em hsla(320, 100%, 60%, 0.3),
+                    1em -0.125em 0.5em hsla(40, 100%, 60%, 0),
+                    -1em 0.125em 0.5em hsla(200, 100%, 60%, 0);
+            }
+        }
+        @media (max-width: 860px), (prefers-reduced-motion: reduce) {
+            .subtitle {
+                letter-spacing: 0.2rem;
             }
         }
         #lore-panel {
@@ -293,19 +332,20 @@
 </head>
 <body>
     <div id="loading-overlay" role="status" aria-live="polite">
-        <div class="aurora">
-            <div class="aurora__item"></div>
-            <div class="aurora__item"></div>
-            <div class="aurora__item"></div>
-            <div class="aurora__item"></div>
-        </div>
         <div class="loading-content">
-            <p class="subtitle">Brewing the future</p>
-            <h1 class="title">
-                Welcome to<br/>Invoker Studio
-            </h1>
-            <p class="loading-desc">We build immersive, story-driven applications and interactive worlds.</p>
-            <p id="loading-text">Brewing the magic...</p>
+            <div class="loader" aria-hidden="true">
+                <div class="inner one"></div>
+                <div class="inner two"></div>
+                <div class="inner three"></div>
+            </div>
+            <div class="loading-copy">
+                <p class="subtitle">Brewing the future</p>
+                <h1 class="title">
+                    Welcome to<br/><span class="lights-title">Invoker Studio</span>
+                </h1>
+                <p class="loading-desc">We build immersive, story-driven applications and interactive worlds.</p>
+            </div>
+            <p id="loading-text">Preparing...</p>
             <div class="loading-bar">
                 <div class="loading-bar__fill" id="loading-bar-fill"></div>
             </div>
