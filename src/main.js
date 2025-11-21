@@ -9,7 +9,9 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 // ========== CONFIGURATION ==========
 const DEV_DEBUG_VISUALS = true;
 const ENABLE_SEASON_PLACEHOLDERS = false;
-const ENABLE_BLOOM = false;
+const ENABLE_BLOOM = true;
+
+
 const ENABLE_AURORA_BANDS = false;
 const GLOBE_RADIUS = 10; // doubled for larger world
 const TORUS_MAJOR_RADIUS = GLOBE_RADIUS + 0.3;
@@ -669,8 +671,8 @@ function createInstancedForest(treePath, count, radius, height, tiltAngle = 0.12
             const asset = { geometry, material: sharedMaterial };
             treeAssetCache.set(treePath, asset);
             buildInstances(asset);
-    },
-    undefined,
+        },
+        undefined,
         (err) => {
             console.warn(`Failed to load ${treePath}`, err);
         }
@@ -722,8 +724,8 @@ function createDancingJellyTrees(count = Math.max(2, Math.round(5 * DECOR_COUNT_
                     offset: Math.random() * Math.PI * 2,
                     mixer
                 });
-    },
-    undefined,
+            },
+            undefined,
             (err) => console.warn('Failed to load dancing_jelly_tree.glb', err)
         );
     }
@@ -1723,11 +1725,11 @@ function updateCharacter(dt) {
     } else if (currentAngularSpeed < -directionThreshold) {
         cameraFollowDirection = -1;
     }
-    
+
     // Get position on equator
     const position = getPositionOnEquator(characterAngle, WALKWAY_RADIUS);
     const normalizedAngle = ((characterAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-    
+
     // Set character position (slightly above walkway)
     character.position.set(
         position.x,
@@ -1737,17 +1739,17 @@ function updateCharacter(dt) {
 
     // Calculate forward direction (tangent to the circle)
     const forward = new THREE.Vector3(-Math.sin(characterAngle), 0, Math.cos(characterAngle));
-    
+
     // Get surface normal (points outward from sphere center)
     const normal = getSurfaceNormal(position);
-    
+
     // Create a rotation matrix that:
     // 1. Aligns character forward along the path tangent
     // 2. Keeps character upright relative to surface normal
     const up = new THREE.Vector3(0, 1, 0); // World up
     const right = new THREE.Vector3().crossVectors(forward, normal).normalize();
     const correctedUp = new THREE.Vector3().crossVectors(right, forward).normalize();
-    
+
     // Create look-at matrix
     const lookAtMatrix = new THREE.Matrix4();
     lookAtMatrix.lookAt(
@@ -1755,7 +1757,7 @@ function updateCharacter(dt) {
         character.position.clone().add(forward),
         correctedUp
     );
-    
+
     // Extract rotation from matrix
     const rotation = new THREE.Euler().setFromRotationMatrix(lookAtMatrix);
     character.rotation.copy(rotation);
@@ -2006,7 +2008,7 @@ const QUADRANT_DEFS = [
     { id: 'dystopian', label: 'Dystopian Frontier', seasonIndex: 3, color: 0x9ea8ff }
 ];
 const QUADRANT_ANCHOR_COUNT = 6;
-const STAR_WARS_BUILDINGS = [
+const GOTHIC_BUILDINGS = [
     { path: '/assets/Gothic/Goth_1.glb', label: 'Goth 1', normAngle: 0.08, scaleMul: 0.6, radiusMul: 0.08 },
     { path: '/assets/Gothic/Goth_2.glb', label: 'Goth 2', normAngle: 0.16, scaleMul: 0.58, radiusMul: 0.1 },
     { path: '/assets/Gothic/Goth_3.glb', label: 'Goth 3', normAngle: 0.24, scaleMul: 0.62, radiusMul: 0.12 },
@@ -2016,6 +2018,33 @@ const STAR_WARS_BUILDINGS = [
     { path: '/assets/Gothic/Goth_7.glb', label: 'Goth 7', normAngle: 0.64, scaleMul: 0.6, radiusMul: 0.2 },
     { path: '/assets/Gothic/Goth_8.glb', label: 'Goth 8', normAngle: 0.76, scaleMul: 0.62, radiusMul: 0.22 },
     { path: '/assets/Gothic/Goth_9.glb', label: 'Goth 9', normAngle: 0.88, scaleMul: 0.6, radiusMul: 0.24 }
+];
+
+const REAL_STAR_WARS_BUILDINGS = [
+    { path: '/assets/Starwars/Star_1.glb', label: 'Star 1', normAngle: 0.08, scaleMul: 0.6, radiusMul: 0.08 },
+    { path: '/assets/Starwars/Star_2.glb', label: 'Star 2', normAngle: 0.16, scaleMul: 0.6, radiusMul: 0.12 },
+    { path: '/assets/Starwars/Star_3.glb', label: 'Star 3', normAngle: 0.24, scaleMul: 0.6, radiusMul: 0.16 },
+    { path: '/assets/Starwars/Star_4.glb', label: 'Star 4', normAngle: 0.32, scaleMul: 0.6, radiusMul: 0.2 },
+    { path: '/assets/Starwars/Star_5.glb', label: 'Star 5', normAngle: 0.40, scaleMul: 0.6, radiusMul: 0.24 },
+    { path: '/assets/Starwars/Star_6.glb', label: 'Star 6', normAngle: 0.48, scaleMul: 0.6, radiusMul: 0.28 },
+    { path: '/assets/Starwars/Star_7.glb', label: 'Star 7', normAngle: 0.56, scaleMul: 0.6, radiusMul: 0.32 },
+    { path: '/assets/Starwars/Star_8.glb', label: 'Star 8', normAngle: 0.64, scaleMul: 0.6, radiusMul: 0.36 },
+    { path: '/assets/Starwars/Star_9.glb', label: 'Star 9', normAngle: 0.72, scaleMul: 0.6, radiusMul: 0.4 },
+    { path: '/assets/Starwars/Star_10.glb', label: 'Star 10', normAngle: 0.80, scaleMul: 0.6, radiusMul: 0.44 },
+    { path: '/assets/Starwars/Star_11.glb', label: 'Star 11', normAngle: 0.88, scaleMul: 0.6, radiusMul: 0.48 },
+    { path: '/assets/Starwars/Star_12.glb', label: 'Star 12', normAngle: 0.96, scaleMul: 0.6, radiusMul: 0.52 }
+];
+
+const NIGHT_CITY_BUILDINGS = [
+    { path: '/assets/NightCIty/Night_1.glb', label: 'Night 1', normAngle: 0.10, scaleMul: 0.6, radiusMul: 0.1 },
+    { path: '/assets/NightCIty/Night_2.glb', label: 'Night 2', normAngle: 0.22, scaleMul: 0.6, radiusMul: 0.15 },
+    { path: '/assets/NightCIty/Night_3.glb', label: 'Night 3', normAngle: 0.34, scaleMul: 0.6, radiusMul: 0.2 },
+    { path: '/assets/NightCIty/Night_4.glb', label: 'Night 4', normAngle: 0.46, scaleMul: 0.6, radiusMul: 0.25 },
+    { path: '/assets/NightCIty/Night_5.glb', label: 'Night 5', normAngle: 0.58, scaleMul: 0.6, radiusMul: 0.3 },
+    { path: '/assets/NightCIty/Night_6.glb', label: 'Night 6', normAngle: 0.70, scaleMul: 0.6, radiusMul: 0.35 },
+    { path: '/assets/NightCIty/Night_7.glb', label: 'Night 7', normAngle: 0.82, scaleMul: 0.6, radiusMul: 0.4 },
+    { path: '/assets/NightCIty/Night_8.glb', label: 'Night 8', normAngle: 0.90, scaleMul: 0.6, radiusMul: 0.45 },
+    { path: '/assets/NightCIty/Night_9.glb', label: 'Night 9', normAngle: 0.98, scaleMul: 0.6, radiusMul: 0.5 }
 ];
 const quadrantGroups = {};
 initializeQuadrantZones();
@@ -2045,7 +2074,9 @@ function initializeQuadrantZones() {
     if (typeof window !== 'undefined') {
         window.quadrantGroups = quadrantGroups;
     }
-    populateStarWarsQuadrant();
+    populateGothicQuadrant();
+    populateRealStarWarsQuadrant();
+    populateNightCityQuadrant();
     initializeStarPlacementSurfaces();
     createQuadrantDivisionLines();
 }
@@ -2197,7 +2228,7 @@ function clearQuadrantContent(group, tag) {
     group.userData[tag] = [];
 }
 
-function populateStarWarsQuadrant() {
+function populateGothicQuadrant() {
     const quadrant = quadrantGroups.modern;
     if (!quadrant) return;
     clearQuadrantContent(quadrant, 'starBuildings');
@@ -2206,11 +2237,11 @@ function populateStarWarsQuadrant() {
     const range = config.endAngle - config.startAngle;
     const padding = range * 0.05;
     const usableRange = Math.max(range - padding * 2, 0.001);
-    const segmentCount = STAR_WARS_BUILDINGS.length;
+    const segmentCount = GOTHIC_BUILDINGS.length;
     const baseHeight = innerRing.position.y + 0.02;
     const placementEntries = [];
 
-    STAR_WARS_BUILDINGS.forEach((entry, index) => {
+    GOTHIC_BUILDINGS.forEach((entry, index) => {
         const path = typeof entry === 'string' ? entry : entry.path;
         const entryOffset = typeof entry === 'object' && typeof entry.offset === 'number'
             ? entry.offset
@@ -2225,83 +2256,343 @@ function populateStarWarsQuadrant() {
         const ringOuterLimit = surface.outer - BUILDING_SURFACE_PADDING;
         const availableWidth = Math.max(ringOuterLimit - ringInnerLimit, BUILDING_SURFACE_PADDING * 2);
         loadGLTFClone(path, (model) => {
-            model.userData.tag = 'starBuildings';
-            model.traverse((child) => {
-                if (child.isMesh) {
-                    ensureMaterialTextures(child.material);
+            try {
+                // Create a container to center the model geometry
+                const container = new THREE.Group();
+                container.userData.tag = 'starBuildings';
+
+                // Calculate center offset
+                const initialBox = new THREE.Box3().setFromObject(model);
+                const center = new THREE.Vector3();
+                initialBox.getCenter(center);
+
+                // Center the model within the container (align bottom to 0)
+                model.position.set(-center.x, -initialBox.min.y, -center.z);
+                container.add(model);
+
+                container.traverse((child) => {
+                    if (child.isMesh) {
+                        ensureMaterialTextures(child.material);
+                        // Emissive glow removed per user request
+                    }
+                });
+
+                const rawSize = new THREE.Vector3();
+                const rawBox = new THREE.Box3().setFromObject(container);
+                rawBox.getSize(rawSize);
+                const span = Math.max(rawSize.x, rawSize.z, 0.001);
+                const entryScaleMul = typeof entry === 'object' && entry.scaleMul ? entry.scaleMul : 1;
+                const desiredScale = Math.min(availableWidth / span, 6) * STAR_BUILDING_SCALE_MULTIPLIER * entryScaleMul;
+                let scaleFactor = desiredScale;
+                container.scale.multiplyScalar(scaleFactor);
+
+                const fittedBox = new THREE.Box3();
+                const fittedSize = new THREE.Vector3();
+                let lift = baseHeight;
+                let width = span * scaleFactor;
+                let attempt = 0;
+                while (attempt < 20) {
+                    fittedBox.setFromObject(container);
+                    fittedBox.getSize(fittedSize);
+                    width = Math.max(fittedSize.x, fittedSize.z);
+                    lift = baseHeight - fittedBox.min.y;
+                    if (width <= availableWidth) {
+                        break;
+                    }
+                    const shrinkRatio = Math.max(availableWidth / width, 0.8);
+                    scaleFactor *= shrinkRatio;
+                    container.scale.setScalar(scaleFactor);
+                    attempt++;
                 }
-            });
-
-            const rawSize = new THREE.Vector3();
-            const rawBox = new THREE.Box3().setFromObject(model);
-            rawBox.getSize(rawSize);
-            const span = Math.max(rawSize.x, rawSize.z, 0.001);
-            const entryScaleMul = typeof entry === 'object' && entry.scaleMul ? entry.scaleMul : 1;
-            const desiredScale = Math.min(availableWidth / span, 6) * STAR_BUILDING_SCALE_MULTIPLIER * entryScaleMul;
-            let scaleFactor = desiredScale;
-            model.scale.multiplyScalar(scaleFactor);
-
-            const fittedBox = new THREE.Box3();
-            const fittedSize = new THREE.Vector3();
-            let lift = baseHeight;
-            let width = span * scaleFactor;
-            let attempt = 0;
-            while (attempt < 20) {
-                fittedBox.setFromObject(model);
-                fittedBox.getSize(fittedSize);
-                width = Math.max(fittedSize.x, fittedSize.z);
-                lift = baseHeight - fittedBox.min.y;
-                if (width <= availableWidth) {
-                    break;
+                if (width > availableWidth) {
+                    const finalRatio = availableWidth / Math.max(width, 0.0001);
+                    scaleFactor *= finalRatio;
+                    container.scale.setScalar(scaleFactor);
+                    fittedBox.setFromObject(container);
+                    fittedBox.getSize(fittedSize);
+                    width = Math.max(fittedSize.x, fittedSize.z);
+                    lift = baseHeight - fittedBox.min.y;
                 }
-                const shrinkRatio = Math.max(availableWidth / width, 0.8);
-                scaleFactor *= shrinkRatio;
-                model.scale.setScalar(scaleFactor);
-                attempt++;
-            }
-            if (width > availableWidth) {
-                const finalRatio = availableWidth / Math.max(width, 0.0001);
-                scaleFactor *= finalRatio;
-                model.scale.setScalar(scaleFactor);
-                fittedBox.setFromObject(model);
-                fittedBox.getSize(fittedSize);
-                width = Math.max(fittedSize.x, fittedSize.z);
-                lift = baseHeight - fittedBox.min.y;
-            }
-            const entryRadiusMul = typeof entry === 'object' && entry.radiusMul ? entry.radiusMul : 0.4;
-            const usableSpan = Math.max(ringOuterLimit - ringInnerLimit - width, BUILDING_SURFACE_PADDING);
-            const radiusBlend = THREE.MathUtils.clamp(entryRadiusMul, 0, 1);
-            const preferredRadius = ringInnerLimit + width * 0.5 + usableSpan * radiusBlend;
-            const radius = THREE.MathUtils.clamp(
-                preferredRadius,
-                ringInnerLimit + width * 0.5,
-                ringOuterLimit - width * 0.5
-            );
-            model.position.set(
-                Math.cos(angle) * radius,
-                lift,
-                Math.sin(angle) * radius
-            );
-            const rotationOffset = typeof entry === 'object' && entry.rotationOffset ? entry.rotationOffset : 0;
-            model.rotation.y = angle + Math.PI / 2 + rotationOffset;
-            model.lookAt(0, lift, 0);
-            quadrant.add(model);
+                const entryRadiusMul = typeof entry === 'object' && entry.radiusMul ? entry.radiusMul : 0.4;
+                const usableSpan = Math.max(ringOuterLimit - ringInnerLimit - width, BUILDING_SURFACE_PADDING);
+                const radiusBlend = THREE.MathUtils.clamp(entryRadiusMul, 0, 1);
+                const preferredRadius = ringInnerLimit + width * 0.5 + usableSpan * radiusBlend;
+                const radius = THREE.MathUtils.clamp(
+                    preferredRadius,
+                    ringInnerLimit + width * 0.5,
+                    ringOuterLimit - width * 0.5
+                );
+                container.position.set(
+                    Math.cos(angle) * radius,
+                    lift,
+                    Math.sin(angle) * radius
+                );
+                const rotationOffset = typeof entry === 'object' && entry.rotationOffset ? entry.rotationOffset : 0;
+                container.rotation.y = angle + Math.PI / 2 + rotationOffset;
+                container.lookAt(0, lift, 0);
+                quadrant.add(container);
 
-            const propEntry = {
-                object: model,
-                angle,
-                baseHeight: lift,
-                hoverSpeed: 0.2 + Math.random() * 0.25,
-                hoverAmplitude: 0.12 + Math.random() * 0.08,
-                phase: Math.random() * Math.PI * 2,
-                mixer: null
-            };
-            worldProps.push(propEntry);
-            placementEntries.push(propEntry);
+                const propEntry = {
+                    object: container,
+                    angle,
+                    baseHeight: lift,
+                    hoverSpeed: 0.2 + Math.random() * 0.25,
+                    hoverAmplitude: 0.12 + Math.random() * 0.08,
+                    phase: Math.random() * Math.PI * 2,
+                    mixer: null
+                };
+                worldProps.push(propEntry);
+                placementEntries.push(propEntry);
+            } catch (e) {
+                console.error('Error placing building:', e);
+            }
         }, (err) => console.warn(`Failed to load ${path}`, err));
     });
     quadrant.userData.starBuildings = placementEntries;
     createStarfallParticles(quadrant, config);
+}
+
+function populateRealStarWarsQuadrant() {
+    const quadrant = quadrantGroups.dystopian;
+    if (!quadrant) return;
+    clearQuadrantContent(quadrant, 'starBuildings');
+    const config = quadrant.userData;
+    const range = config.endAngle - config.startAngle;
+    const padding = range * 0.05;
+    const usableRange = Math.max(range - padding * 2, 0.001);
+    const segmentCount = REAL_STAR_WARS_BUILDINGS.length;
+    const baseHeight = innerRing.position.y + 0.02;
+    const placementEntries = [];
+
+    REAL_STAR_WARS_BUILDINGS.forEach((entry, index) => {
+        const path = typeof entry === 'string' ? entry : entry.path;
+        const entryOffset = typeof entry === 'object' && typeof entry.offset === 'number'
+            ? entry.offset
+            : 0;
+        const normalized = typeof entry === 'object' && typeof entry.normAngle === 'number'
+            ? THREE.MathUtils.clamp(entry.normAngle, 0, 1)
+            : (index + 0.5) / Math.max(segmentCount, 1);
+        const baseAngle = config.startAngle + padding + usableRange * normalized;
+        const angle = baseAngle + entryOffset;
+        const surface = getPlacementSurface(entry);
+        const ringInnerLimit = surface.inner + BUILDING_SURFACE_PADDING;
+        const ringOuterLimit = surface.outer - BUILDING_SURFACE_PADDING;
+        const availableWidth = Math.max(ringOuterLimit - ringInnerLimit, BUILDING_SURFACE_PADDING * 2);
+        loadGLTFClone(path, (model) => {
+            try {
+                // Create a container to center the model geometry
+                const container = new THREE.Group();
+                container.userData.tag = 'starBuildings';
+
+                // Calculate center offset
+                const initialBox = new THREE.Box3().setFromObject(model);
+                const center = new THREE.Vector3();
+                initialBox.getCenter(center);
+
+                // Center the model within the container (align bottom to 0)
+                model.position.set(-center.x, -initialBox.min.y, -center.z);
+                container.add(model);
+
+                container.traverse((child) => {
+                    if (child.isMesh) {
+                        ensureMaterialTextures(child.material);
+                        // Emissive glow removed per user request
+                    }
+                });
+
+                const rawSize = new THREE.Vector3();
+                const rawBox = new THREE.Box3().setFromObject(container);
+                rawBox.getSize(rawSize);
+                const span = Math.max(rawSize.x, rawSize.z, 0.001);
+                const entryScaleMul = typeof entry === 'object' && entry.scaleMul ? entry.scaleMul : 1;
+                const desiredScale = Math.min(availableWidth / span, 6) * STAR_BUILDING_SCALE_MULTIPLIER * entryScaleMul;
+                let scaleFactor = desiredScale;
+                container.scale.multiplyScalar(scaleFactor);
+
+                const fittedBox = new THREE.Box3();
+                const fittedSize = new THREE.Vector3();
+                let lift = baseHeight;
+                let width = span * scaleFactor;
+                let attempt = 0;
+                while (attempt < 20) {
+                    fittedBox.setFromObject(container);
+                    fittedBox.getSize(fittedSize);
+                    width = Math.max(fittedSize.x, fittedSize.z);
+                    lift = baseHeight - fittedBox.min.y;
+                    if (width <= availableWidth) {
+                        break;
+                    }
+                    const shrinkRatio = Math.max(availableWidth / width, 0.8);
+                    scaleFactor *= shrinkRatio;
+                    container.scale.setScalar(scaleFactor);
+                    attempt++;
+                }
+                if (width > availableWidth) {
+                    const finalRatio = availableWidth / Math.max(width, 0.0001);
+                    scaleFactor *= finalRatio;
+                    container.scale.setScalar(scaleFactor);
+                    fittedBox.setFromObject(container);
+                    fittedBox.getSize(fittedSize);
+                    width = Math.max(fittedSize.x, fittedSize.z);
+                    lift = baseHeight - fittedBox.min.y;
+                }
+                const entryRadiusMul = typeof entry === 'object' && entry.radiusMul ? entry.radiusMul : 0.4;
+                const usableSpan = Math.max(ringOuterLimit - ringInnerLimit - width, BUILDING_SURFACE_PADDING);
+                const radiusBlend = THREE.MathUtils.clamp(entryRadiusMul, 0, 1);
+                const preferredRadius = ringInnerLimit + width * 0.5 + usableSpan * radiusBlend;
+                const radius = THREE.MathUtils.clamp(
+                    preferredRadius,
+                    ringInnerLimit + width * 0.5,
+                    ringOuterLimit - width * 0.5
+                );
+                container.position.set(
+                    Math.cos(angle) * radius,
+                    lift,
+                    Math.sin(angle) * radius
+                );
+                const rotationOffset = typeof entry === 'object' && entry.rotationOffset ? entry.rotationOffset : 0;
+                container.rotation.y = angle + Math.PI / 2 + rotationOffset;
+                container.lookAt(0, lift, 0);
+                quadrant.add(container);
+
+                const propEntry = {
+                    object: container,
+                    angle,
+                    baseHeight: lift,
+                    hoverSpeed: 0.2 + Math.random() * 0.25,
+                    hoverAmplitude: 0.12 + Math.random() * 0.08,
+                    phase: Math.random() * Math.PI * 2,
+                    mixer: null
+                };
+                worldProps.push(propEntry);
+                placementEntries.push(propEntry);
+            } catch (e) {
+                console.error('Error placing building:', e);
+            }
+        }, (err) => console.warn(`Failed to load ${path}`, err));
+    });
+    quadrant.userData.starBuildings = placementEntries;
+}
+
+function populateNightCityQuadrant() {
+    const quadrant = quadrantGroups.neon;
+    if (!quadrant) return;
+    clearQuadrantContent(quadrant, 'starBuildings');
+    const config = quadrant.userData;
+    const range = config.endAngle - config.startAngle;
+    const padding = range * 0.05;
+    const usableRange = Math.max(range - padding * 2, 0.001);
+    const segmentCount = NIGHT_CITY_BUILDINGS.length;
+    const baseHeight = innerRing.position.y + 0.02;
+    const placementEntries = [];
+
+    NIGHT_CITY_BUILDINGS.forEach((entry, index) => {
+        const path = typeof entry === 'string' ? entry : entry.path;
+        const entryOffset = typeof entry === 'object' && typeof entry.offset === 'number'
+            ? entry.offset
+            : 0;
+        const normalized = typeof entry === 'object' && typeof entry.normAngle === 'number'
+            ? THREE.MathUtils.clamp(entry.normAngle, 0, 1)
+            : (index + 0.5) / Math.max(segmentCount, 1);
+        const baseAngle = config.startAngle + padding + usableRange * normalized;
+        const angle = baseAngle + entryOffset;
+        const surface = getPlacementSurface(entry);
+        const ringInnerLimit = surface.inner + BUILDING_SURFACE_PADDING;
+        const ringOuterLimit = surface.outer - BUILDING_SURFACE_PADDING;
+        const availableWidth = Math.max(ringOuterLimit - ringInnerLimit, BUILDING_SURFACE_PADDING * 2);
+        loadGLTFClone(path, (model) => {
+            try {
+                // Create a container to center the model geometry
+                const container = new THREE.Group();
+                container.userData.tag = 'starBuildings';
+
+                // Calculate center offset
+                const initialBox = new THREE.Box3().setFromObject(model);
+                const center = new THREE.Vector3();
+                initialBox.getCenter(center);
+
+                // Center the model within the container (align bottom to 0)
+                model.position.set(-center.x, -initialBox.min.y, -center.z);
+                container.add(model);
+
+                container.traverse((child) => {
+                    if (child.isMesh) {
+                        ensureMaterialTextures(child.material);
+                    }
+                });
+
+                const rawSize = new THREE.Vector3();
+                const rawBox = new THREE.Box3().setFromObject(container);
+                rawBox.getSize(rawSize);
+                const span = Math.max(rawSize.x, rawSize.z, 0.001);
+                const entryScaleMul = typeof entry === 'object' && entry.scaleMul ? entry.scaleMul : 1;
+                const desiredScale = Math.min(availableWidth / span, 6) * STAR_BUILDING_SCALE_MULTIPLIER * entryScaleMul;
+                let scaleFactor = desiredScale;
+                container.scale.multiplyScalar(scaleFactor);
+
+                const fittedBox = new THREE.Box3();
+                const fittedSize = new THREE.Vector3();
+                let lift = baseHeight;
+                let width = span * scaleFactor;
+                let attempt = 0;
+                while (attempt < 20) {
+                    fittedBox.setFromObject(container);
+                    fittedBox.getSize(fittedSize);
+                    width = Math.max(fittedSize.x, fittedSize.z);
+                    lift = baseHeight - fittedBox.min.y;
+                    if (width <= availableWidth) {
+                        break;
+                    }
+                    const shrinkRatio = Math.max(availableWidth / width, 0.8);
+                    scaleFactor *= shrinkRatio;
+                    container.scale.setScalar(scaleFactor);
+                    attempt++;
+                }
+                if (width > availableWidth) {
+                    const finalRatio = availableWidth / Math.max(width, 0.0001);
+                    scaleFactor *= finalRatio;
+                    container.scale.setScalar(scaleFactor);
+                    fittedBox.setFromObject(container);
+                    fittedBox.getSize(fittedSize);
+                    width = Math.max(fittedSize.x, fittedSize.z);
+                    lift = baseHeight - fittedBox.min.y;
+                }
+                const entryRadiusMul = typeof entry === 'object' && entry.radiusMul ? entry.radiusMul : 0.4;
+                const usableSpan = Math.max(ringOuterLimit - ringInnerLimit - width, BUILDING_SURFACE_PADDING);
+                const radiusBlend = THREE.MathUtils.clamp(entryRadiusMul, 0, 1);
+                const preferredRadius = ringInnerLimit + width * 0.5 + usableSpan * radiusBlend;
+                const radius = THREE.MathUtils.clamp(
+                    preferredRadius,
+                    ringInnerLimit + width * 0.5,
+                    ringOuterLimit - width * 0.5
+                );
+                container.position.set(
+                    Math.cos(angle) * radius,
+                    lift,
+                    Math.sin(angle) * radius
+                );
+                const rotationOffset = typeof entry === 'object' && entry.rotationOffset ? entry.rotationOffset : 0;
+                container.rotation.y = angle + Math.PI / 2 + rotationOffset;
+                container.lookAt(0, lift, 0);
+                quadrant.add(container);
+
+                const propEntry = {
+                    object: container,
+                    angle,
+                    baseHeight: lift,
+                    hoverSpeed: 0.2 + Math.random() * 0.25,
+                    hoverAmplitude: 0.12 + Math.random() * 0.08,
+                    phase: Math.random() * Math.PI * 2,
+                    mixer: null
+                };
+                worldProps.push(propEntry);
+                placementEntries.push(propEntry);
+            } catch (e) {
+                console.error('Error placing building:', e);
+            }
+        }, (err) => console.warn(`Failed to load ${path}`, err));
+    });
+    quadrant.userData.starBuildings = placementEntries;
 }
 
 function createStarfallParticles(quadrant, config) {
@@ -2418,14 +2709,14 @@ function createSummerSection() {
         return;
     }
     const group = seasonGroups.summer;
-    
+
     // Grass patches
     for (let i = 0; i < 30; i++) {
         const angle = SEASON_ANGLES[0] + (Math.random() - 0.5) * 0.5;
         const radius = GLOBE_RADIUS + 0.1;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
-        
+
         const grassGeometry = new THREE.ConeGeometry(0.1, 0.3, 6);
         const grassMaterial = new THREE.MeshStandardMaterial({ color: 0x4a8a2e });
         const grass = new THREE.Mesh(grassGeometry, grassMaterial);
@@ -2433,13 +2724,13 @@ function createSummerSection() {
         grass.rotation.y = Math.random() * Math.PI * 2;
         group.add(grass);
     }
-    
+
     // Fireflies (particles)
     const fireflyGeometry = new THREE.BufferGeometry();
     const fireflyCount = Math.max(20, Math.round(50 * PARTICLE_COUNT_SCALE));
     const fireflyPositions = new Float32Array(fireflyCount * 3);
     const fireflyVelocities = [];
-    
+
     for (let i = 0; i < fireflyCount; i++) {
         const angle = SEASON_ANGLES[0] + (Math.random() - 0.5) * 0.5;
         const radius = GLOBE_RADIUS + 0.5 + Math.random() * 2;
@@ -2451,7 +2742,7 @@ function createSummerSection() {
             speed: 0.5 + Math.random() * 0.5
         });
     }
-    
+
     fireflyGeometry.setAttribute('position', new THREE.BufferAttribute(fireflyPositions, 3));
     const fireflyMaterial = new THREE.PointsMaterial({
         color: 0xffaa00,
@@ -2473,7 +2764,7 @@ function createRainSection() {
         return;
     }
     const group = seasonGroups.rain;
-    
+
     // Dark clouds
     for (let i = 0; i < 8; i++) {
         const cloudGeometry = new THREE.SphereGeometry(0.8 + Math.random() * 0.4, 16, 16);
@@ -2492,13 +2783,13 @@ function createRainSection() {
         );
         group.add(cloud);
     }
-    
+
     // Rain particles
     const rainGeometry = new THREE.BufferGeometry();
     const rainCount = Math.max(120, Math.round(500 * PARTICLE_COUNT_SCALE));
     const rainPositions = new Float32Array(rainCount * 3);
     const rainVelocities = [];
-    
+
     for (let i = 0; i < rainCount; i++) {
         const angle = SEASON_ANGLES[1] + (Math.random() - 0.5) * 0.5;
         const radius = GLOBE_RADIUS + 0.5 + Math.random() * 3;
@@ -2507,7 +2798,7 @@ function createRainSection() {
         rainPositions[i * 3 + 2] = Math.sin(angle) * radius;
         rainVelocities.push(5 + Math.random() * 5);
     }
-    
+
     rainGeometry.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
     const rainMaterial = new THREE.LineBasicMaterial({
         color: 0x4a8aff,
@@ -2517,7 +2808,7 @@ function createRainSection() {
     const rain = new THREE.LineSegments(rainGeometry, rainMaterial);
     group.add(rain);
     group.userData.rain = { geometry: rainGeometry, velocities: rainVelocities };
-    
+
     // Lightning flash
     const lightning = new THREE.DirectionalLight(0xffffff, 0);
     lightning.position.set(0, 10, 0);
@@ -2534,21 +2825,21 @@ function createAutumnSection() {
         return;
     }
     const group = seasonGroups.autumn;
-    
+
     // Orange/brown trees
     for (let i = 0; i < 20; i++) {
         const angle = SEASON_ANGLES[2] + (Math.random() - 0.5) * 0.5;
         const radius = GLOBE_RADIUS + 0.1;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
-        
+
         // Trunk
         const trunkGeometry = new THREE.CylinderGeometry(0.1, 0.12, 1, 8);
         const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x5a3a2a });
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
         trunk.position.set(x, 0.5, z);
         group.add(trunk);
-        
+
         // Foliage (orange/brown)
         const foliageGeometry = new THREE.ConeGeometry(0.6, 1.2, 8);
         const foliageMaterial = new THREE.MeshStandardMaterial({ color: 0xff6b35 });
@@ -2556,7 +2847,7 @@ function createAutumnSection() {
         foliage.position.set(x, 1.3, z);
         group.add(foliage);
     }
-    
+
     // Fallen leaves on ground
     for (let i = 0; i < 100; i++) {
         const angle = SEASON_ANGLES[2] + (Math.random() - 0.5) * 0.5;
@@ -2576,13 +2867,13 @@ function createAutumnSection() {
         leaf.rotation.z = Math.random() * Math.PI * 2;
         group.add(leaf);
     }
-    
+
     // Falling leaves (particles)
     const leafGeometry = new THREE.BufferGeometry();
     const leafCount = Math.max(80, Math.round(200 * PARTICLE_COUNT_SCALE));
     const leafPositions = new Float32Array(leafCount * 3);
     const leafVelocities = [];
-    
+
     for (let i = 0; i < leafCount; i++) {
         const angle = SEASON_ANGLES[2] + (Math.random() - 0.5) * 0.5;
         const radius = GLOBE_RADIUS + 0.5 + Math.random() * 2;
@@ -2595,7 +2886,7 @@ function createAutumnSection() {
             phase: Math.random() * Math.PI * 2
         });
     }
-    
+
     leafGeometry.setAttribute('position', new THREE.BufferAttribute(leafPositions, 3));
     const leafMaterial = new THREE.PointsMaterial({
         color: 0xff6b35,
@@ -2617,24 +2908,24 @@ function createWinterSection() {
         return;
     }
     const group = seasonGroups.winter;
-    
+
     // Snow-covered surfaces (white material on globe section)
     // This is handled by fog and particle overlay
-    
+
     // Pine trees with snow
     for (let i = 0; i < 15; i++) {
         const angle = SEASON_ANGLES[3] + (Math.random() - 0.5) * 0.5;
         const radius = GLOBE_RADIUS + 0.1;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
-        
+
         // Trunk
         const trunkGeometry = new THREE.CylinderGeometry(0.12, 0.14, 1.5, 8);
         const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x4a3a2a });
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
         trunk.position.set(x, 0.75, z);
         group.add(trunk);
-        
+
         // Snow-covered branches (layered cones)
         for (let j = 0; j < 3; j++) {
             const branchGeometry = new THREE.ConeGeometry(0.5 - j * 0.15, 0.8, 8);
@@ -2644,13 +2935,13 @@ function createWinterSection() {
             group.add(branch);
         }
     }
-    
+
     // Snow particles (2000+)
     const snowGeometry = new THREE.BufferGeometry();
     const snowCount = Math.max(300, Math.round(2000 * PARTICLE_COUNT_SCALE));
     const snowPositions = new Float32Array(snowCount * 3);
     const snowVelocities = [];
-    
+
     for (let i = 0; i < snowCount; i++) {
         const angle = SEASON_ANGLES[3] + (Math.random() - 0.5) * 0.5;
         const radius = GLOBE_RADIUS + 0.5 + Math.random() * 4;
@@ -2663,7 +2954,7 @@ function createWinterSection() {
             phase: Math.random() * Math.PI * 2
         });
     }
-    
+
     snowGeometry.setAttribute('position', new THREE.BufferAttribute(snowPositions, 3));
     const snowMaterial = new THREE.PointsMaterial({
         color: 0xffffff,
@@ -2689,15 +2980,15 @@ const panoramaTexture = textureLoader.load(
         // Configure panorama texture
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.mapping = THREE.EquirectangularReflectionMapping;
-        
+
         // Set as scene background for visual sky
         scene.background = texture;
-        
+
         // Generate environment map for proper lighting and reflections
         // For now, use texture directly as environment (works well for most cases)
         // PMREMGenerator would provide better quality but requires additional setup
         scene.environment = texture;
-        
+
         console.log('360° Panoramic skybox loaded successfully');
     },
     undefined,
@@ -2788,10 +3079,10 @@ if (ENABLE_BLOOM) {
     renderer.setClearColor('#05000c', 1);
     bloomComposer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, camera);
-    bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.8, 0.6, 0.1);
-    bloomPass.threshold = 0.1;
-    bloomPass.strength = 1.1;
-    bloomPass.radius = 0.8;
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+    bloomPass.threshold = 0.85;
+    bloomPass.strength = 0.5;
+    bloomPass.radius = 0.4;
     bloomComposer.renderToScreen = true;
     bloomComposer.addPass(renderPass);
     bloomComposer.addPass(bloomPass);
@@ -3002,16 +3293,16 @@ function animate() {
     const shouldUpdateSparseParticles = sparseParticleFrame === 0;
     forestGlowUniforms.time.value = totalTime;
     auroraUniforms.time.value = totalTime;
-    
+
     // Rotate globe continuously
     globe.rotation.y += globeRotationSpeed * dt;
-    
+
     // Update character position
     updateCharacter(dt);
-    
+
     // Update camera to follow character (3rd-person view)
     updateCamera(dt);
-    
+
     // Update fireflies (summer)
     if (ALLOW_SEASON_FX) {
         const fireflies = seasonGroups.summer.userData.fireflies;
@@ -3023,7 +3314,7 @@ function animate() {
             });
             fireflies.points.geometry.attributes.position.needsUpdate = true;
         }
-        
+
         const rain = seasonGroups.rain.userData.rain;
         if (shouldUpdateSparseParticles && rain) {
             const positions = rain.geometry.attributes.position.array;
@@ -3035,7 +3326,7 @@ function animate() {
             });
             rain.geometry.attributes.position.needsUpdate = true;
         }
-        
+
         const lightning = seasonGroups.rain.userData.lightning;
         if (lightning) {
             if (Math.random() < 0.01) {
@@ -3044,7 +3335,7 @@ function animate() {
                 lightning.intensity = Math.max(0, lightning.intensity - dt * 5);
             }
         }
-        
+
         const leaves = seasonGroups.autumn.userData.leaves;
         if (shouldUpdateSparseParticles && leaves) {
             const positions = leaves.points.geometry.attributes.position.array;
@@ -3057,7 +3348,7 @@ function animate() {
             });
             leaves.points.geometry.attributes.position.needsUpdate = true;
         }
-        
+
         const snow = seasonGroups.winter.userData.snow;
         if (shouldUpdateSparseParticles && snow) {
             const positions = snow.points.geometry.attributes.position.array;
@@ -3071,17 +3362,17 @@ function animate() {
             snow.points.geometry.attributes.position.needsUpdate = true;
         }
     }
-    
+
     // Parallax background rotation + animated skybox
     parallaxSphere.rotation.y += dt * 0.01;
     updateSkyboxTexture(dt);
-    
+
     // Rotate panoramic skybox for subtle movement + recolor
     if (scene.background && scene.background.isTexture && scene.background.mapping === THREE.EquirectangularReflectionMapping) {
         scene.background.rotation += 0.001 * dt;
     }
     updateSkyboxTexture(dt, currentDayNightFactor);
-    
+
     // Update effect ring particles
     if (shouldUpdateSparseParticles) {
         [innerEffectParticles, outerEffectParticles].forEach((system) => {
@@ -3097,7 +3388,7 @@ function animate() {
             system.geometry.attributes.position.needsUpdate = true;
         });
     }
-    
+
     // Update weather zone particles
     if (shouldUpdateSparseParticles) {
         weatherSystems.forEach((system) => {
@@ -3112,7 +3403,7 @@ function animate() {
             system.particles.geometry.attributes.position.needsUpdate = true;
         });
     }
-    
+
     // Global atmosphere drifting
     if (shouldUpdateSparseParticles && globalAtmosphereParticles && globalAtmosphereParticles.visible) {
         const positions = globalAtmosphereParticles.geometry.attributes.position.array;
@@ -3126,7 +3417,7 @@ function animate() {
         }
         globalAtmosphereParticles.geometry.attributes.position.needsUpdate = true;
     }
-    
+
     if (shouldUpdateSparseParticles) {
         if (globalPixelParticles) {
             const positions = globalPixelParticles.geometry.attributes.position.array;
@@ -3157,7 +3448,7 @@ function animate() {
         }
     }
     updateStarfallSystems(dt);
-    
+
     // Floating sky elements
     floatingElements.forEach((mesh) => {
         if (IS_LOW_POWER_DEVICE && !mesh.visible) {
@@ -3235,12 +3526,12 @@ function animate() {
 
     updateAssetVisibility();
     animateLoreMarkers(dt);
-    
+
     // Update season based on character angle (which quadrant they're in)
     // Quadrants: 0°-90° (Summer), 90°-180° (Rain), 180°-270° (Autumn), 270°-360° (Winter)
     let newSeason = 0;
     const normalizedAngle = ((characterAngle % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2);
-    
+
     if (normalizedAngle >= 0 && normalizedAngle < Math.PI / 2) {
         newSeason = 0; // Summer (0°-90°)
     } else if (normalizedAngle >= Math.PI / 2 && normalizedAngle < Math.PI) {
@@ -3250,11 +3541,11 @@ function animate() {
     } else {
         newSeason = 3; // Winter (270°-360°)
     }
-    
+
     if (newSeason !== targetSeason) {
         requestSeasonChange(newSeason);
     }
-    
+
     updateSeasonSystems(dt);
     updateGlobalFog(dt);
     updateDayNightLight(totalTime);
