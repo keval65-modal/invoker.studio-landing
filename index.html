@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,50 +18,46 @@
             --fs: clamp(2.6rem, 7vw, 5.5rem);
             --ls: clamp(-1.75px, -0.25vw, -3.5px);
         }
-        html, body {
+
+        html,
+        body {
             height: 100%;
         }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
             overflow: hidden;
             font-family: "Inter", "DM Sans", system-ui, -apple-system, sans-serif;
             background: var(--bg);
             color: #fff;
         }
-        body.is-loading #ui,
+
         body.is-loading #hotspots,
         body.is-loading #lore-panel {
             opacity: 0;
             pointer-events: none;
         }
+
         body.is-loading #c {
             opacity: 0;
         }
+
         #c {
             display: block;
             width: 100vw;
             height: 100vh;
             transition: opacity 0.4s ease;
         }
+
         body:not(.is-loading) #lore-panel {
             pointer-events: auto;
         }
-        #ui {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            color: white;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px 15px;
-            border-radius: 8px;
-            font-size: 14px;
-            z-index: 100;
-            transition: opacity 0.35s ease;
-        }
+
         #hotspots {
             position: fixed;
             bottom: 20px;
@@ -71,6 +68,7 @@
             z-index: 100;
             transition: opacity 0.35s ease;
         }
+
         .hotspot-btn {
             padding: 8px 16px;
             background: rgba(100, 150, 255, 0.8);
@@ -81,14 +79,17 @@
             font-size: 12px;
             transition: background 0.2s;
         }
+
         .hotspot-btn:hover {
             background: rgba(100, 150, 255, 1);
         }
+
         .hotspot-btn.is-highlighted {
             box-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
             background: rgba(180, 210, 255, 0.95);
             color: #05000c;
         }
+
         #loading-overlay {
             position: fixed;
             inset: 0;
@@ -101,10 +102,12 @@
             transition: opacity 0.45s ease;
             pointer-events: auto;
         }
+
         #loading-overlay.is-hidden {
             opacity: 0;
             pointer-events: none;
         }
+
         .loading-content {
             width: min(480px, 90vw);
             display: flex;
@@ -114,18 +117,21 @@
             justify-content: center;
             text-align: center;
         }
+
         .loading-copy {
             display: flex;
             flex-direction: column;
             gap: 1rem;
             width: 100%;
         }
+
         .subtitle {
             font-size: 0.95rem;
             letter-spacing: 0.35rem;
             text-transform: uppercase;
-            color: rgba(255,255,255,0.7);
+            color: rgba(255, 255, 255, 0.7);
         }
+
         .title {
             font-size: var(--fs);
             font-weight: 800;
@@ -133,33 +139,38 @@
             position: relative;
             overflow: hidden;
             margin: 0;
-            text-shadow: 0 10px 45px rgba(0,0,0,0.6);
+            text-shadow: 0 10px 45px rgba(0, 0, 0, 0.6);
         }
+
         .title .lights-title {
             display: inline-block;
             margin-top: 0.35em;
             font-weight: 700;
             animation: lights 5s 0.75s linear infinite;
         }
+
         .loading-desc {
             font-size: 1.05rem;
-            color: rgba(255,255,255,0.82);
+            color: rgba(255, 255, 255, 0.82);
             max-width: 480px;
         }
+
         #loading-text {
             font-size: 0.95rem;
             text-transform: uppercase;
             letter-spacing: 0.35rem;
-            color: rgba(255,255,255,0.75);
+            color: rgba(255, 255, 255, 0.75);
         }
+
         .loading-bar {
             width: 100%;
             height: 6px;
-            background: rgba(255,255,255,0.15);
+            background: rgba(255, 255, 255, 0.15);
             border-radius: 999px;
             overflow: hidden;
             position: relative;
         }
+
         .loading-bar__fill {
             width: 0%;
             height: 100%;
@@ -167,11 +178,13 @@
             border-radius: 999px;
             transition: width 0.3s ease;
         }
+
         .loading-progress {
             font-size: 0.85rem;
             letter-spacing: 0.4rem;
             color: #c8afff;
         }
+
         .loader {
             position: relative;
             width: 64px;
@@ -179,6 +192,7 @@
             border-radius: 50%;
             perspective: 800px;
         }
+
         .loader .inner {
             position: absolute;
             box-sizing: border-box;
@@ -186,48 +200,58 @@
             height: 100%;
             border-radius: 50%;
         }
+
         .loader .inner.one {
             left: 0;
             top: 0;
             animation: rotate-one 1s linear infinite;
             border-bottom: 3px solid #EFEFFA;
         }
+
         .loader .inner.two {
             right: 0;
             top: 0;
             animation: rotate-two 1s linear infinite;
             border-right: 3px solid #EFEFFA;
         }
+
         .loader .inner.three {
             right: 0;
             bottom: 0;
             animation: rotate-three 1s linear infinite;
             border-top: 3px solid #EFEFFA;
         }
+
         @keyframes rotate-one {
             0% {
                 transform: rotateX(35deg) rotateY(-45deg) rotateZ(0deg);
             }
+
             100% {
                 transform: rotateX(35deg) rotateY(-45deg) rotateZ(360deg);
             }
         }
+
         @keyframes rotate-two {
             0% {
                 transform: rotateX(50deg) rotateY(10deg) rotateZ(0deg);
             }
+
             100% {
                 transform: rotateX(50deg) rotateY(10deg) rotateZ(360deg);
             }
         }
+
         @keyframes rotate-three {
             0% {
                 transform: rotateX(35deg) rotateY(55deg) rotateZ(0deg);
             }
+
             100% {
                 transform: rotateX(35deg) rotateY(55deg) rotateZ(360deg);
             }
         }
+
         @keyframes lights {
             0% {
                 color: hsl(230, 40%, 80%);
@@ -237,6 +261,7 @@
                     -1em -0.125em 0.5em hsla(40, 100%, 60%, 0),
                     1em 0.125em 0.5em hsla(200, 100%, 60%, 0);
             }
+
             30% {
                 color: hsl(230, 80%, 90%);
                 text-shadow:
@@ -245,6 +270,7 @@
                     -0.5em -0.125em 0.25em hsla(40, 100%, 60%, 0.2),
                     0.5em 0.125em 0.25em hsla(200, 100%, 60%, 0.4);
             }
+
             40% {
                 color: hsl(230, 100%, 95%);
                 text-shadow:
@@ -253,6 +279,7 @@
                     -0.25em -0.125em 0.125em hsla(40, 100%, 60%, 0.2),
                     0.25em 0.125em 0.125em hsla(200, 100%, 60%, 0.4);
             }
+
             70% {
                 color: hsl(230, 80%, 90%);
                 text-shadow:
@@ -261,6 +288,7 @@
                     0.5em -0.125em 0.25em hsla(40, 100%, 60%, 0.2),
                     -0.5em 0.125em 0.25em hsla(200, 100%, 60%, 0.4);
             }
+
             100% {
                 color: hsl(230, 40%, 80%);
                 text-shadow:
@@ -270,11 +298,14 @@
                     -1em 0.125em 0.5em hsla(200, 100%, 60%, 0);
             }
         }
-        @media (max-width: 860px), (prefers-reduced-motion: reduce) {
+
+        @media (max-width: 860px),
+        (prefers-reduced-motion: reduce) {
             .subtitle {
                 letter-spacing: 0.2rem;
             }
         }
+
         #lore-panel {
             position: fixed;
             top: 20px;
@@ -292,26 +323,31 @@
             transition: opacity 0.25s ease, transform 0.25s ease;
             z-index: 200;
         }
+
         #lore-panel.is-visible {
             opacity: 1;
             transform: translateY(0);
             pointer-events: auto;
         }
+
         #lore-panel h2 {
             font-size: 18px;
             margin-bottom: 8px;
             letter-spacing: 0.04em;
         }
+
         #lore-panel p {
             font-size: 14px;
             line-height: 1.4;
             color: #d8cfff;
             margin-bottom: 12px;
         }
+
         #lore-panel .panel-actions {
             display: flex;
             justify-content: flex-end;
         }
+
         #lore-panel button {
             border: none;
             border-radius: 8px;
@@ -321,15 +357,18 @@
             font-weight: 600;
             transition: background 0.2s ease;
         }
+
         #lore-panel button.close-btn {
             background: rgba(255, 255, 255, 0.12);
             color: #f5edff;
         }
+
         #lore-panel button.close-btn:hover {
             background: rgba(255, 255, 255, 0.2);
         }
     </style>
 </head>
+
 <body>
     <div id="loading-overlay" role="status" aria-live="polite">
         <div class="loading-content">
@@ -341,7 +380,7 @@
             <div class="loading-copy">
                 <p class="subtitle">Brewing the future</p>
                 <h1 class="title">
-                    Welcome to<br/><span class="lights-title">Invoker Studio</span>
+                    Welcome to<br /><span class="lights-title">Invoker Studio</span>
                 </h1>
                 <p class="loading-desc">We build immersive, story-driven applications and interactive worlds.</p>
             </div>
@@ -353,10 +392,6 @@
         </div>
     </div>
     <canvas id="c"></canvas>
-    <div id="ui">
-        <div>Season: <span id="season">Summer</span></div>
-        <div>Controls: Drag to rotate • Scroll/Swipe to move</div>
-    </div>
     <div id="hotspots">
         <button class="hotspot-btn" data-hotspot="about">About Us</button>
         <button class="hotspot-btn" data-hotspot="projects">Clients & Projects</button>
@@ -372,5 +407,5 @@
     </div>
     <script type="module" src="/src/main.js"></script>
 </body>
-</html>
 
+</html>
