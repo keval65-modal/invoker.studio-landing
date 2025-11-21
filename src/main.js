@@ -2350,6 +2350,8 @@ function populateGothicQuadrant() {
     });
     quadrant.userData.starBuildings = placementEntries;
     createStarfallParticles(quadrant, config);
+    createGothicParticlesForQuadrant(quadrant, config);
+    createGothicWeather(quadrant, config);
 }
 
 function populateRealStarWarsQuadrant() {
@@ -2472,6 +2474,8 @@ function populateRealStarWarsQuadrant() {
         }, (err) => console.warn(`Failed to load ${path}`, err));
     });
     quadrant.userData.starBuildings = placementEntries;
+    createStarParticlesForQuadrant(quadrant, config);
+    createCosmicDustWeather(quadrant, config);
 }
 
 function populateNightCityQuadrant() {
@@ -2593,6 +2597,308 @@ function populateNightCityQuadrant() {
         }, (err) => console.warn(`Failed to load ${path}`, err));
     });
     quadrant.userData.starBuildings = placementEntries;
+    createPixelParticlesForQuadrant(quadrant, config);
+    createNeonRainWeather(quadrant, config);
+}
+
+function createStarParticlesForQuadrant(quadrant, config) {
+    const count = 300;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const baseHeight = -3;
+    const upperHeight = 8;
+    const minRadius = GLOBE_RADIUS;
+    const maxRadius = 28;
+
+    for (let i = 0; i < count; i++) {
+        const angle = THREE.MathUtils.lerp(config.startAngle, config.endAngle, Math.random());
+        const radius = THREE.MathUtils.lerp(minRadius, maxRadius, Math.random());
+        const height = THREE.MathUtils.lerp(baseHeight, upperHeight, Math.random());
+
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = height;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+        sizes[i] = 0.08 + Math.random() * 0.12;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const material = new THREE.PointsMaterial({
+        color: 0xffeb3b,
+        size: 0.15,
+        transparent: true,
+        opacity: 0.8,
+        sizeAttenuation: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        map: createStarTexture()
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    particles.userData.tag = 'quadrantParticles';
+    particles.userData.speeds = new Array(count).fill(0).map(() => 0.3 + Math.random() * 0.4);
+    particles.userData.phases = new Array(count).fill(0).map(() => Math.random() * Math.PI * 2);
+    quadrant.add(particles);
+
+    return particles;
+}
+
+function createPixelParticlesForQuadrant(quadrant, config) {
+    const count = 400;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const baseHeight = -3;
+    const upperHeight = 8;
+    const minRadius = GLOBE_RADIUS;
+    const maxRadius = 28;
+
+    const neonColors = [
+        new THREE.Color(0x00ffff), // Cyan
+        new THREE.Color(0xff00ff), // Magenta
+        new THREE.Color(0xffff00), // Yellow
+        new THREE.Color(0x00ff00)  // Green
+    ];
+
+    for (let i = 0; i < count; i++) {
+        const angle = THREE.MathUtils.lerp(config.startAngle, config.endAngle, Math.random());
+        const radius = THREE.MathUtils.lerp(minRadius, maxRadius, Math.random());
+        const height = THREE.MathUtils.lerp(baseHeight, upperHeight, Math.random());
+
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = height;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+
+        const color = neonColors[Math.floor(Math.random() * neonColors.length)];
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+        size: 0.08,
+        transparent: true,
+        opacity: 0.9,
+        vertexColors: true,
+        sizeAttenuation: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    particles.userData.tag = 'quadrantParticles';
+    particles.userData.speeds = new Array(count).fill(0).map(() => 0.5 + Math.random() * 0.5);
+    particles.userData.directions = new Array(count).fill(0).map(() => Math.random() > 0.5 ? 1 : -1);
+    quadrant.add(particles);
+
+    return particles;
+}
+
+function createGothicParticlesForQuadrant(quadrant, config) {
+    const count = 250;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const baseHeight = -3;
+    const upperHeight = 8;
+    const minRadius = GLOBE_RADIUS;
+    const maxRadius = 28;
+
+    for (let i = 0; i < count; i++) {
+        const angle = THREE.MathUtils.lerp(config.startAngle, config.endAngle, Math.random());
+        const radius = THREE.MathUtils.lerp(minRadius, maxRadius, Math.random());
+        const height = THREE.MathUtils.lerp(baseHeight, upperHeight, Math.random());
+
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = height;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const material = new THREE.PointsMaterial({
+        color: 0x00ff88,
+        size: 0.12,
+        transparent: true,
+        opacity: 0.6,
+        sizeAttenuation: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    particles.userData.tag = 'quadrantParticles';
+    particles.userData.speeds = new Array(count).fill(0).map(() => 0.2 + Math.random() * 0.3);
+    particles.userData.swirls = new Array(count).fill(0).map(() => Math.random() * Math.PI * 2);
+    quadrant.add(particles);
+
+    return particles;
+}
+
+function createStarTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+
+    const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.2, 'rgba(255, 255, 200, 0.8)');
+    gradient.addColorStop(0.4, 'rgba(255, 255, 150, 0.4)');
+    gradient.addColorStop(1, 'rgba(255, 255, 100, 0)');
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 32, 32);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+}
+
+function createGothicWeather(quadrant, config) {
+    const count = 180;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count);
+    const baseHeight = -2;
+    const upperHeight = 7;
+    const minRadius = GLOBE_RADIUS;
+    const maxRadius = 28;
+
+    for (let i = 0; i < count; i++) {
+        const angle = THREE.MathUtils.lerp(config.startAngle, config.endAngle, Math.random());
+        const radius = THREE.MathUtils.lerp(minRadius, maxRadius, Math.random());
+        const height = THREE.MathUtils.lerp(baseHeight, upperHeight, Math.random());
+
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = height;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+        velocities[i] = 0.3 + Math.random() * 0.4;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const material = new THREE.PointsMaterial({
+        color: 0x00ff88,
+        size: 0.25,
+        transparent: true,
+        opacity: 0.4,
+        sizeAttenuation: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    particles.userData.tag = 'quadrantWeather';
+    particles.userData.weatherType = 'gothic';
+    particles.userData.velocities = velocities;
+    quadrant.add(particles);
+
+    return particles;
+}
+
+function createNeonRainWeather(quadrant, config) {
+    const count = 250;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count);
+    const colors = new Float32Array(count * 3);
+    const baseHeight = -2;
+    const upperHeight = 9;
+    const minRadius = GLOBE_RADIUS;
+    const maxRadius = 28;
+
+    const purpleShades = [
+        new THREE.Color(0xaa00ff),
+        new THREE.Color(0xff00ff),
+        new THREE.Color(0xdd00ff),
+        new THREE.Color(0x8800ff)
+    ];
+
+    for (let i = 0; i < count; i++) {
+        const angle = THREE.MathUtils.lerp(config.startAngle, config.endAngle, Math.random());
+        const radius = THREE.MathUtils.lerp(minRadius, maxRadius, Math.random());
+        const height = THREE.MathUtils.lerp(baseHeight, upperHeight, Math.random());
+
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = height;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+        velocities[i] = 1.5 + Math.random() * 1.5;
+
+        const color = purpleShades[Math.floor(Math.random() * purpleShades.length)];
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+        size: 0.15,
+        transparent: true,
+        opacity: 0.7,
+        vertexColors: true,
+        sizeAttenuation: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    particles.userData.tag = 'quadrantWeather';
+    particles.userData.weatherType = 'neonRain';
+    particles.userData.velocities = velocities;
+    quadrant.add(particles);
+
+    return particles;
+}
+
+function createCosmicDustWeather(quadrant, config) {
+    const count = 200;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count);
+    const sizes = new Float32Array(count);
+    const baseHeight = -2;
+    const upperHeight = 8;
+    const minRadius = GLOBE_RADIUS;
+    const maxRadius = 28;
+
+    for (let i = 0; i < count; i++) {
+        const angle = THREE.MathUtils.lerp(config.startAngle, config.endAngle, Math.random());
+        const radius = THREE.MathUtils.lerp(minRadius, maxRadius, Math.random());
+        const height = THREE.MathUtils.lerp(baseHeight, upperHeight, Math.random());
+
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = height;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+        velocities[i] = 0.2 + Math.random() * 0.3;
+        sizes[i] = 0.1 + Math.random() * 0.15;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const material = new THREE.PointsMaterial({
+        color: 0x888888,
+        size: 0.12,
+        transparent: true,
+        opacity: 0.5,
+        sizeAttenuation: true,
+        depthWrite: false,
+        blending: THREE.NormalBlending
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    particles.userData.tag = 'quadrantWeather';
+    particles.userData.weatherType = 'cosmicDust';
+    particles.userData.velocities = velocities;
+    quadrant.add(particles);
+
+    return particles;
 }
 
 function createStarfallParticles(quadrant, config) {
@@ -3446,6 +3752,117 @@ function animate() {
             }
             equatorialPixelRing.geometry.attributes.position.needsUpdate = true;
         }
+    }
+
+    // Update quadrant particles
+    if (shouldUpdateSparseParticles) {
+        Object.values(quadrantGroups).forEach((quadrant) => {
+            quadrant.children.forEach((child) => {
+                if (child.userData.tag === 'quadrantParticles') {
+                    const positions = child.geometry.attributes.position.array;
+
+                    // Star particles (Star Wars quadrant)
+                    if (child.userData.speeds && child.userData.phases) {
+                        for (let i = 0; i < child.userData.speeds.length; i++) {
+                            const idx = i * 3;
+                            const phase = child.userData.phases[i];
+                            const speed = child.userData.speeds[i];
+                            positions[idx + 1] += Math.sin(totalTime * speed + phase) * 0.015;
+                        }
+                    }
+
+                    // Pixel particles (Night City quadrant)
+                    if (child.userData.directions) {
+                        for (let i = 0; i < child.userData.directions.length; i++) {
+                            const idx = i * 3;
+                            const direction = child.userData.directions[i];
+                            const speed = child.userData.speeds[i];
+                            positions[idx + 1] += direction * speed * dt * 0.3;
+
+                            // Reset if out of bounds
+                            if (positions[idx + 1] > 8.5) {
+                                positions[idx + 1] = -3;
+                            } else if (positions[idx + 1] < -3.5) {
+                                positions[idx + 1] = 8;
+                            }
+                        }
+                    }
+
+                    // Gothic particles (Gothic quadrant)
+                    if (child.userData.swirls) {
+                        for (let i = 0; i < child.userData.swirls.length; i++) {
+                            const idx = i * 3;
+                            const swirl = child.userData.swirls[i];
+                            const speed = child.userData.speeds[i];
+
+                            // Swirling motion
+                            const angle = totalTime * speed + swirl;
+                            const radius = Math.sqrt(positions[idx] * positions[idx] + positions[idx + 2] * positions[idx + 2]);
+                            positions[idx] = Math.cos(angle) * radius;
+                            positions[idx + 2] = Math.sin(angle) * radius;
+                            positions[idx + 1] += Math.sin(totalTime * speed * 2 + swirl) * 0.01;
+                        }
+                    }
+
+                    child.geometry.attributes.position.needsUpdate = true;
+                }
+            });
+        });
+    }
+
+    // Update quadrant weather systems
+    if (shouldUpdateSparseParticles) {
+        Object.values(quadrantGroups).forEach((quadrant) => {
+            quadrant.children.forEach((child) => {
+                if (child.userData.tag === 'quadrantWeather') {
+                    const positions = child.geometry.attributes.position.array;
+                    const velocities = child.userData.velocities;
+                    const weatherType = child.userData.weatherType;
+
+                    if (weatherType === 'gothic') {
+                        // Gothic fog - slow downward drift with swirling
+                        for (let i = 0; i < velocities.length; i++) {
+                            const idx = i * 3;
+                            positions[idx + 1] -= velocities[i] * dt * 0.2;
+
+                            // Swirl effect
+                            const angle = totalTime * 0.1 + i;
+                            const radius = Math.sqrt(positions[idx] * positions[idx] + positions[idx + 2] * positions[idx + 2]);
+                            positions[idx] = Math.cos(angle) * radius;
+                            positions[idx + 2] = Math.sin(angle) * radius;
+
+                            // Reset if too low
+                            if (positions[idx + 1] < -3) {
+                                positions[idx + 1] = 7;
+                            }
+                        }
+                    } else if (weatherType === 'neonRain') {
+                        // Neon rain - fast downward movement
+                        for (let i = 0; i < velocities.length; i++) {
+                            const idx = i * 3;
+                            positions[idx + 1] -= velocities[i] * dt;
+
+                            // Reset if too low
+                            if (positions[idx + 1] < -3) {
+                                positions[idx + 1] = 9;
+                            }
+                        }
+                    } else if (weatherType === 'cosmicDust') {
+                        // Cosmic dust - slow horizontal drift
+                        for (let i = 0; i < velocities.length; i++) {
+                            const idx = i * 3;
+                            const angle = totalTime * velocities[i] * 0.05 + i;
+                            const radius = Math.sqrt(positions[idx] * positions[idx] + positions[idx + 2] * positions[idx + 2]);
+                            positions[idx] = Math.cos(angle) * radius;
+                            positions[idx + 2] = Math.sin(angle) * radius;
+                            positions[idx + 1] += Math.sin(totalTime * velocities[i] + i) * 0.008;
+                        }
+                    }
+
+                    child.geometry.attributes.position.needsUpdate = true;
+                }
+            });
+        });
     }
     updateStarfallSystems(dt);
 
